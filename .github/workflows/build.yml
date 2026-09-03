@@ -1,0 +1,31 @@
+name: build-windows-exe
+on: [workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Распаковать проект
+        run: Expand-Archive -Path genspark-arkhivator-fixed.zip -DestinationPath .
+
+      - name: Установить зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r genspark-archive/requirements.txt
+          pip install pyinstaller docopt breadability
+
+      - name: Собрать exe
+        working-directory: genspark-archive
+        run: pyinstaller --noconfirm --clean build/genspark_arkhivator.spec
+
+      - name: Выложить результат
+        uses: actions/upload-artifact@v4
+        with:
+          name: GensparkArkhivator-win
+          path: genspark-archive/dist/GensparkArkhivator
