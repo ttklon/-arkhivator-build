@@ -1,0 +1,18 @@
+# «Лектор» — зависимости обработки текста и аудио.
+# ВАЖНО: torch и torchaudio ставятся ОТДЕЛЬНО (см. install.bat), потому что
+# для видеокарты NVIDIA нужен CUDA-вариант, а без неё — компактный CPU-вариант:
+#   NVIDIA:  pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126
+#   CPU:     pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+numpy
+pymorphy3          # морфология русского языка (часть речи, падеж, лемма)
+razdel             # токенизация и разбивка на предложения для русского
+ruaccent           # нейросетевая расстановка ударений
+natasha            # синтаксический разбор (дерево зависимостей) — модели внутри пакета
+PyMuPDF            # чтение PDF
+python-docx        # чтение .docx
+beautifulsoup4     # чтение .epub/.fb2
+charset-normalizer # определение кодировки текстовых файлов
+lameenc            # экспорт MP3
+customtkinter      # интерфейс
+chatterbox-tts     # HD-движок (естественный голос, нужен NVIDIA + torchaudio)
