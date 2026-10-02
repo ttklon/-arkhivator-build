@@ -1,2 +1,0 @@
-# -arkhivator-build
- arkhivator-build
