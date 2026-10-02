@@ -15,8 +15,9 @@ set "PY=%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
 if not exist "!PY!" (
   where python >nul 2>nul
   if not errorlevel 1 (
+    rem пропускаем заглушку Microsoft Store (WindowsApps)
     for /f "delims=" %%i in ('where python') do (
-      if not exist "!PY!" set "PY=%%i"
+      echo %%i | findstr /I "WindowsApps" >nul || if not exist "!PY!" set "PY=%%i"
     )
   )
 )
