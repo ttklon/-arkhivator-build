@@ -1,0 +1,72 @@
+# -*- coding: utf-8 -*-
+"""Токенизация: предложения и слова через razdel (правила для русского языка)."""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import List
+
+from razdel import sentenize, tokenize
+
+# сокращения, после которых razdel зря рвёт предложение:
+# «а также л. 5 дела» не должно становиться «…л.» + «5 дела»
+_REF_ABBR = re.compile(
+    r"(?:^|\s)(?:ст|ст\.ст|ч|п|пп|л|абз|гл|разд|гг|г|тыс|млн|млрд|см|напр|"
+    r"им|ред|прим|мин|сек|экз|ед|руб|коп|ул|пр|ш|д|в|вв|т|е|к)\.$",
+    re.IGNORECASE)
+_INITIAL = re.compile(r"(?:^|\s)[А-ЯЁ]\.$")
+
+
+@dataclass
+class Sentence:
+    text: str
+    start: int
+    end: int
+
+
+@dataclass
+class Token:
+    text: str
+    start: int
+    end: int
+
+    @property
+    def is_word(self) -> bool:
+        return any(c.isalpha() for c in self.text)
+
+    @property
+    def is_punct(self) -> bool:
+        return not self.is_word and not self.text.strip().isdigit()
+
+    @property
+    def is_number(self) -> bool:
+        return self.text.replace(",", ".").replace(" ", "").replace("\u00a0", ".").replace(".", "", 1).isdigit() and any(c.isdigit() for c in self.text)
+
+
+def split_sentences(text: str) -> List[Sentence]:
+    """Предложения; разрывы после известных сокращений склеиваем обратно.
+
+    «…по делу л. 5» — «л.» не конец предложения, а часть ссылки;
+    «Иванов И. И. Петров» — инициалы, а не границы предложений.
+    """
+    out: List[Sentence] = []
+    for s in sentenize(text):
+        sent = Sentence(s.text, s.start, s.stop)
+        if out:
+            prev = out[-1]
+            tail = prev.text.rstrip()
+            nxt = sent.text.lstrip()
+            merge = False
+            if _REF_ABBR.search(tail) and (nxt[:1].isdigit() or nxt[:1].islower()):
+                merge = True
+            elif _INITIAL.search(tail) and nxt[:1].isupper():
+                merge = True
+            if merge:
+                out[-1] = Sentence(prev.text + sent.text, prev.start, sent.end)
+                continue
+        out.append(sent)
+    return out
+
+
+def split_tokens(text: str) -> List[Token]:
+    return [Token(t.text, t.start, t.stop) for t in tokenize(text)]
