@@ -395,6 +395,18 @@ class Pipeline:
                         rate=seg.rate, pitch=seg.pitch, final=seg.final,
                         question_rise=(seg.question_rise if last else False)))
 
+            # КАПС-слово из судебного акта («суд УКАЗАЛ…») —
+            # говоримое усиление: голосом выделяем, как в документе
+            if seg.emphasize_word is None:
+                for tok in txt.split():
+                    core = tok.strip(".,!?;:…«»()[]\"'—")
+                    letters = core.replace("+", "")
+                    if (len(letters) >= 4 and letters.isupper()
+                            and any(v in letters for v in "АЕЁИОУЫЭЮЯ")):
+                        # аббревиатуры без гласных (СССР, РФ) не трогаем
+                        seg.emphasize_word = core
+                        break
+
             # логическое ударение (тр. 15-17)
             if emphasis_mode != "off" and syn.focus_id >= 0:
                 focus_word = next((w for w in syn.words if w.id == syn.focus_id), None)

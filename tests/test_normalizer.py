@@ -322,3 +322,68 @@ def test_question_rise_segments():
     assert any(sg.question_rise for u in utts for sg in u.segments)
     utts2, _ = pipe._analyze_wrap("Кто виновен в этом деле?")
     assert not any(sg.question_rise for u in utts2 for sg in u.segments)
+
+
+def test_dimensions_with_h():
+    """«30х40 см» — размеры читаются с «на», а не буквой «х»."""
+    n = make()
+    out = n.normalize_sentence("Плитка размером 30х40 см уложена.")
+    assert "тридцать на сорок" in out
+    out2 = n.normalize_sentence("Размер 25x35 мм.")
+    assert "двадцать пять на тридцать пять" in out2
+
+
+def test_time_ranges():
+    """«10:00-13:00» — диапазон времени, а не развалившийся номер."""
+    n = make()
+    out = n.normalize_sentence("Приём: 10:00-13:00 и 14:00-17:00.")
+    assert "с десяти до тринадцати часов" in out
+    assert "с четырнадцати до семнадцати часов" in out
+    out2 = n.normalize_sentence("Обед 13:00-14:30.")
+    assert "с тринадцати часов" in out2 and "тридцати минут" in out2
+
+
+def test_time_case_by_preposition():
+    """«с 9:00» — родительный, «к 12:00» — дательный, «в 12:30» — как было."""
+    n = make()
+    out = n.normalize_sentence("Магазин работает с 9:00 до 18:00.")
+    assert "с девяти часов" in out and "до восемнадцати часов" in out
+    out2 = n.normalize_sentence("Пик к 12:00.")
+    assert "к двенадцати часам" in out2
+
+
+def test_address_parts():
+    """«корп.», «кв.», «эт.» разворачиваются; «кв. м» не ломается."""
+    n = make()
+    out = n.normalize_sentence("Адрес: ул. Ленина, д. 5, корп. 2, кв. 17, 3 эт.")
+    for w in ("улица", "дом пять", "корпус два", "квартира семнадцать",
+              "третий этаж"):
+        assert w in out, (w, out)
+    out2 = n.normalize_sentence("Квартира 45 кв. м.")
+    assert "квадратных метров" in out2
+    out3 = n.normalize_sentence("Офис на 3 этаже здания.")
+    assert "на третьем этаже" in out3
+
+
+def test_mister_abbreviation():
+    """«г-н Иванов» — «господин Иванов», «г-жа» — «госпожа»."""
+    n = make()
+    out = n.normalize_sentence("Г-н Иванов обратился в суд.")
+    assert "господин Иванов" in out
+    out2 = n.normalize_sentence("Г-жа Петрова ответчик.")
+    assert "госпожа Петрова" in out2
+
+
+def test_plural_number_sign():
+    """«№№ 1, 2» — «номера один, два», а не «номер номер»."""
+    n = make()
+    out = n.normalize_sentence("Открыты дела №№ 1, 2 и 3.")
+    assert "номера" in out
+    assert "номер номер" not in out
+
+
+def test_usa_abbreviation():
+    """«США» читается по буквам, а не как слово «сша»."""
+    n = make()
+    out = n.normalize_sentence("Практика США учтена.")
+    assert "эс шэ а" in out

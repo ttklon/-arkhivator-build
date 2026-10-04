@@ -231,3 +231,16 @@ def test_cli_doctor(capsys):
     out = capsys.readouterr().out
     assert "самодиагностика" in out.lower() or "Лектор" in out
     assert rc in (0, 1)
+
+
+def test_caps_emphasis():
+    """КАПС-слово судебного акта получает голосовое усиление."""
+    pipe = Pipeline(load_settings())
+    utts, _ = pipe._analyze_wrap("Суд УКАЗАЛ: освободить зал.")
+    segs = [sg for u in utts for sg in u.segments]
+    assert any(sg.emphasize_word and "УКАЗ" in sg.emphasize_word
+               for sg in segs)
+    # аббревиатуры без гласных не подчёркиваются
+    utts2, _ = pipe._analyze_wrap("СССР и РФ распались.")
+    assert all(sg.emphasize_word is None
+               for u in utts2 for sg in u.segments)

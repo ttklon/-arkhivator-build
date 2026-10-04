@@ -43,6 +43,9 @@ ARTICLE_WORDS = {
     "абз": ("абзац", "m", "ord"),
     "абзац": (None, "m", "ord"), "абзаца": (None, "m", "ord"), "абзацем": (None, "m", "ord"),
     "л": ("лист", "m", "card"),
+    "корп": ("корпус", "m", "card"),
+    "кв": ("квартира", "f", "card"),
+    "эт": ("этаж", "m", "ord"),
     "гл": ("глава", "f", "card"),
     "глава": (None, "f", "card"), "главы": (None, "f", "card"), "главой": (None, "f", "card"),
     "разд": ("раздел", "m", "card"),
@@ -93,6 +96,7 @@ class TextNormalizer:
         text = self._roman(text)             # XX век, глава XVIII
         text = self._phones(text)            # +7 926 123-45-67 — поцифрово
         text = self._digit_groups(text)      # коды вида 123-45-67 — поцифрово
+        text = self._dimensions(text)        # 30х40 см -> «30 на 40»
         text = self._ordinals(text)          # 19-й, 2-я, 158-х -> порядковые
         text = self._ranges(text)            # 158-160, 2010-2015 годов
         text = self._fractions(text)         # 1/2 -> «одна вторая»
@@ -187,7 +191,7 @@ class TextNormalizer:
 
     # ==================================================================
     # 2. Статьи, части, пункты (тр. 24)
-    _REF_WORD = r"(?:ст|статья|статьи|статьёй|статьей|статью|ч|часть|части|частью|п|пп|подп|пункт|пункта|пунктом|пункту|пункты|подпункт|подпункта|подпунктом|абз|абзац|абзаца|абзацем|л|лист|листа|листу|гл|глава|главы|главой|разд|раздел|раздела|разделом)"
+    _REF_WORD = r"(?:ст|статья|статьи|статьёй|статьей|статью|ч|часть|части|частью|п|пп|подп|пункт|пункта|пунктом|пункту|пункты|подпункт|подпункта|подпунктом|абз|абзац|абзаца|абзацем|л|лист|листа|листу|гл|глава|главы|главой|разд|раздел|раздела|разделом|корп|кв|эт)"
     _REF_ITEM = (r"(?:\d+(?:\.\d+)+"      # цепочка «20.2», «3.5.1» — подраздел
                  r"|\d+|[«\"'][а-яё][»\"']|[а-яё])"
                  r"(?=[)\]},;:!?…\s»]|$|\.(?!\d))")
@@ -212,6 +216,9 @@ class TextNormalizer:
             prefix = full if full else word.lower()
             quote = value.startswith(("«", '"', "'"))
             value_clean = value.strip("«»\"'")
+            # «кв. м» — квадратные метры, их разбирает проход мер позже
+            if key == "кв" and value_clean.lower() == "м":
+                continue
 
             # падеж по предлогу непосредственно перед ссылкой:
             # «по ч. 2» -> «по части второй»; внутри цепочки ссылок
@@ -270,6 +277,42 @@ class TextNormalizer:
             self.report.number_normalized(m.group(0), reading)
         out.append(text[pos:])
         result = "".join(out)
+
+        # «на 3 этаже» — число перед словом: «на третьем этаже»
+        # (мн. ч. «этажами» не трогаем — там количественное чтение)
+        def floor_word_repl(m):
+            n = int(m.group(1))
+            case = word_case(m.group(2)) or "nomn"
+            words = numerals.inflect_words(
+                numerals.ordinal_words(n, "m"), case, last_only=True)
+            reading = " ".join(words) + " " + m.group(2)
+            self.report.number_normalized(m.group(0), reading)
+            return " " + reading + " "
+
+        result = re.sub(r"(?<![\w.-])(\d{1,3})\s+(этаж(?:е|а|у|ом)?)(?![а-яё])",
+                        floor_word_repl, result)
+
+        # «3 эт.» — этаж после числа: «третий этаж»
+        # (падеж по предлогу: «на 3 эт.» -> «на третьем этаже»)
+        def floor_repl(m):
+            from .morphology import inflect_word
+            n = int(m.group(1))
+            before = result[:m.start()].rstrip().rsplit(" ", 1)[-1].lower()
+            if before in ("в", "во", "на"):
+                case = "loct"
+            elif before in ("с", "со", "до", "от"):
+                case = "gent"
+            else:
+                case = "nomn"
+            words = numerals.inflect_words(
+                numerals.ordinal_words(n, "m"), case, last_only=True)
+            floor = inflect_word("этаж", {case}) if case != "nomn" else "этаж"
+            reading = " ".join(words) + " " + (floor or "этаж")
+            self.report.number_normalized(m.group(0), reading)
+            return " " + reading + " "
+
+        result = re.sub(r"(?<![\w.-])(\d{1,3})\s*эт\.?(?![\w.])",
+                        floor_repl, result)
         return re.sub(r"\s+", " ", result)
 
     # ==================================================================
@@ -470,6 +513,17 @@ class TextNormalizer:
         return re.sub(rx, lambda m: repl(m), text)
 
     # ==================================================================
+    # 5б-2. Размеры через «х»: «30х40 см», «25x35 мм», «44,5х60,2 м²»
+    #        читаются «на»: «тридцать на сорок сантиметров»
+    def _dimensions(self, text: str) -> str:
+        def repl(m):
+            reading = m.group(1) + " на " + m.group(2)
+            self.report.number_normalized(m.group(0), reading)
+            return " " + reading + " "
+        return re.sub(r"(?<![\w.])(\d+(?:[.,]\d+)?)\s*[хx×]\s*(\d+(?:[.,]\d+)?)",
+                      repl, text)
+
+    # ==================================================================
     # 5в. Порядковые с суффиксом: «19-й», «2-я», «158-х», «в 3-м»
     _ORD_SUFFIX = {
         "й": ("m", "nomn"), "го": ("m", "gent"), "му": ("m", "datv"),
@@ -658,6 +712,32 @@ class TextNormalizer:
     # ==================================================================
     # 6. Диапазоны: «158-160» -> «от ста пятидесяти восьми до ста шестидесяти»
     def _ranges(self, text: str) -> str:
+        # «10:00-13:00», «9:00–18:00» — диапазон времени: иначе общий
+        # проход диапазонов разрывает его на «10:00-13» + «:00»
+        def time_rng(m):
+            h1, mi1, h2, mi2 = (int(m.group(i)) for i in (1, 2, 3, 4))
+            if h1 > 23 or mi1 > 59 or h2 > 23 or mi2 > 59:
+                return m.group(0)
+            def hm(h, mi):
+                w = numerals.inflect_words(numerals.cardinal_words(h), "gent")
+                out = " ".join(w) + " часов"
+                if mi:
+                    out += " " + " ".join(numerals.inflect_words(
+                        numerals.cardinal_words(mi), "gent")) + " минут"
+                return out
+            if mi1 == 0 and mi2 == 0:
+                reading = ("с " + " ".join(numerals.inflect_words(
+                    numerals.cardinal_words(h1), "gent"))
+                    + " до " + " ".join(numerals.inflect_words(
+                        numerals.cardinal_words(h2), "gent")) + " часов")
+            else:
+                reading = "с " + hm(h1, mi1) + " до " + hm(h2, mi2)
+            self.report.number_normalized(m.group(0), reading)
+            return " " + reading + " "
+
+        text = re.sub(r"(?<![\d.:])(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})(?!\d)",
+                      time_rng, text)
+
         def repl(m):
             a, b = int(m.group(1)), int(m.group(2))
             if a >= b or b > 10 ** 9:
@@ -917,7 +997,15 @@ class TextNormalizer:
             h, mi = int(m.group(1)), int(m.group(2))
             if h > 23 or mi > 59:
                 return m.group(0)
-            reading = " ".join(numerals.hours_minutes(h, mi))
+            words = numerals.hours_minutes(h, mi)
+            # падеж по предлогу: «с 9:00» -> «с девяти часов»,
+            # «к 9:00» -> «к девяти часам»; «в 12:30» — как было
+            before = text[:m.start()].rstrip().rsplit(" ", 1)[-1].lower()
+            if before in ("с", "со", "от", "до", "после", "без", "около"):
+                words = numerals.inflect_words(words, "gent")
+            elif before == "к":
+                words = numerals.inflect_words(words, "datv")
+            reading = " ".join(words)
             self.report.number_normalized(m.group(0), reading)
             return " " + reading + " "
 

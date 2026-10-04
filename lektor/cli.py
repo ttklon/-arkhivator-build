@@ -279,12 +279,13 @@ def batch(a, settings) -> int:
         return 2
     print(f"Пакетная озвучка: {len(files)} файл(ов) из {a.input}")
     ok = 0
+    from .pipeline import Pipeline
+    # один конвейер на всю папку: словари и морфология грузятся один раз
+    pipe = Pipeline(settings, log=print)
     for i, name in enumerate(files, 1):
         path = os.path.join(a.input, name)
         print(f"\n[{i}/{len(files)}] {name}")
         try:
-            from .pipeline import Pipeline
-            pipe = Pipeline(settings, log=print)
             res = pipe.run(read_any(path), os.path.splitext(name)[0])
             if res.audio_path:
                 ok += 1
