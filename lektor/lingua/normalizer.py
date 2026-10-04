@@ -38,6 +38,7 @@ ARTICLE_WORDS = {
     "пункт": (None, "m", "ord"), "пункта": (None, "m", "ord"),
     "пунктом": (None, "m", "ord"), "пункту": (None, "m", "ord"), "пункты": (None, "m", "ord"),
     "пп": ("подпункт", "m", "ord"),
+    "подп": ("подпункт", "m", "ord"),
     "подпункт": (None, "m", "ord"), "подпункта": (None, "m", "ord"), "подпунктом": (None, "m", "ord"),
     "абз": ("абзац", "m", "ord"),
     "абзац": (None, "m", "ord"), "абзаца": (None, "m", "ord"), "абзацем": (None, "m", "ord"),
@@ -85,6 +86,7 @@ class TextNormalizer:
 
     # ==================================================================
     def normalize_sentence(self, text: str) -> str:
+        text = self._paren_dedupe(text)     # 100 000 (сто тысяч) -> 100 000
         text = self._shorts(text)
         text = self._articles(text)          # ст. 159 ч. 2 п. «в»
         text = self._law_numbers(text)       # №149-ФЗ, дело № 2-123/2021
@@ -107,11 +109,73 @@ class TextNormalizer:
         return re.sub(r"\s+", " ", text).strip()
 
     # ==================================================================
+    # 0. Дубли чисел в скобках: «100 000 (сто тысяч) рублей» —
+    #    расшифровка словами не читается дважды
+    _NUM_NF = {
+        "один": 1, "два": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6,
+        "семь": 7, "восемь": 8, "девять": 9, "десять": 10, "одиннадцать": 11,
+        "двенадцать": 12, "тринадцать": 13, "четырнадцать": 14, "пятнадцать": 15,
+        "шестнадцать": 16, "семнадцать": 17, "восемнадцать": 18,
+        "девятнадцать": 19, "двадцать": 20, "тридцать": 30, "сорок": 40,
+        "пятьдесят": 50, "шестьдесят": 60, "семьдесят": 70, "восемьдесят": 80,
+        "девяносто": 90, "сто": 100, "двести": 200, "триста": 300,
+        "четыреста": 400, "пятьсот": 500, "шестьсот": 600, "семьсот": 700,
+        "восемьсот": 800, "девятьсот": 900, "тысяча": 1000,
+        "миллион": 10 ** 6, "миллиард": 10 ** 9, "триллион": 10 ** 12,
+    }
+
+    def _words_to_int(self, words: str):
+        """«сто тысяч» -> 100000; None, если это не число словами."""
+        from .morphology import analyze
+        total, cur = 0, 0
+        for tok in words.split():
+            p = analyze(tok)
+            nf = p.normal_form if p else tok
+            v = self._NUM_NF.get(nf)
+            if v is None:
+                return None
+            if v < 1000:
+                cur += v
+            else:
+                total += (cur or 1) * v
+                cur = 0
+        return total + cur
+
+    def _paren_dedupe(self, text: str) -> str:
+        def repl(m):
+            digits = int(re.sub(r"[\s\u00a0]", "", m.group(1)))
+            if self._words_to_int(m.group(2)) == digits:
+                self.report.number_normalized(
+                    m.group(0).strip(),
+                    m.group(1).strip() + " (расшифровка в скобках пропущена)")
+                return " " + m.group(1) + " "
+            return m.group(0)
+        return re.sub(r"(?<![\w-])(\d[\d\u00a0 ]{0,18}?)\s*\(([а-яё][а-яё \\-]{2,80})\)",
+                      repl, text)
+
+    # ==================================================================
     # 1. Мелкие сокращения
     # сокращения, чувствительные к регистру: «в.» = век, но «В.» = вольты
     _CASE_SENSITIVE_SHORTS = {"в.", "вв."}
 
     def _shorts(self, text: str) -> str:
+        # «±3 мм» читается словами; оставляем знак только в разметке
+        text = text.replace("±", " плюс-минус ")
+        # «т.н. льгота» -> «так называемая льгота» (согласование по роду)
+        def _tn(m):
+            from .morphology import analyze, inflect_word
+            nxt = m.group(1)
+            p = analyze(nxt)
+            grams = set()
+            if p and p.tag:
+                if p.tag.gender in ("masc", "femn", "neut"):
+                    grams.add(p.tag.gender)
+                if p.tag.number == "plur":
+                    grams.add("plur")
+            word = inflect_word("называемый", grams) if grams else None
+            return "так " + (word or "называемый") + " " + nxt
+        text = re.sub(r"(?<![\w.])т\.?\s?н\.?(?![\w.])\s+([а-яё][а-яё-]*)",
+                      _tn, text, flags=re.IGNORECASE)
         for k in sorted(self.shorts, key=len, reverse=True):
             v = self.shorts[k]
             flags = 0 if k in self._CASE_SENSITIVE_SHORTS else re.IGNORECASE
@@ -121,8 +185,9 @@ class TextNormalizer:
 
     # ==================================================================
     # 2. Статьи, части, пункты (тр. 24)
-    _REF_WORD = r"(?:ст|статья|статьи|статьёй|статьей|статью|ч|часть|части|частью|п|пп|пункт|пункта|пунктом|пункту|пункты|подпункт|подпункта|подпунктом|абз|абзац|абзаца|абзацем|л|лист|листа|листу|гл|глава|главы|главой|разд|раздел|раздела|разделом)"
-    _REF_ITEM = (r"(?:\d+|[«\"'][а-яё][»\"']|[а-яё])"
+    _REF_WORD = r"(?:ст|статья|статьи|статьёй|статьей|статью|ч|часть|части|частью|п|пп|подп|пункт|пункта|пунктом|пункту|пункты|подпункт|подпункта|подпунктом|абз|абзац|абзаца|абзацем|л|лист|листа|листу|гл|глава|главы|главой|разд|раздел|раздела|разделом)"
+    _REF_ITEM = (r"(?:\d+(?:\.\d+)+"      # цепочка «20.2», «3.5.1» — подраздел
+                 r"|\d+|[«\"'][а-яё][»\"']|[а-яё])"
                  r"(?=[)\]},;:!?…\s»]|$|\.(?!\d))")
 
     def _articles(self, text: str) -> str:
@@ -165,7 +230,14 @@ class TextNormalizer:
                 if inflected:
                     prefix = inflected
 
-            if value_clean.isdigit():
+            if re.fullmatch(r"\d+(?:\.\d+)+", value_clean):
+                # подраздел: «ст. 20.2» -> «статья двадцать два»,
+                # «п. 3.5.1» -> «пункт три пять один» (по группам)
+                spoken = " ".join(
+                    " ".join(numerals.cardinal_words(int(g)))
+                    for g in value_clean.split("."))
+                reading = f"{prefix} {spoken}"
+            elif value_clean.isdigit():
                 n = int(value_clean)
                 if numtype == "card":
                     # номер-обозначение читается именительным:
@@ -613,20 +685,49 @@ class TextNormalizer:
                 reading = " ".join(wa) + " — " + " ".join(wb) + " " + year_word.strip()
                 self.report.number_normalized(m.group(0), reading)
                 return " " + reading + " "
-            wa = numerals.inflect_words(numerals.cardinal_words(a), "gent")
-            wb = numerals.inflect_words(numerals.cardinal_words(b), "gent")
+            # «10-15%» — проценты в диапазоне («выросла на 10-15%»)
+            if m.group(4):
+                before = text[:m.start()].rstrip().rsplit(" ", 1)[-1].lower()
+                wa0 = numerals.cardinal_words(a)
+                wb0 = numerals.cardinal_words(b)
+                if before in ("в", "во", "на", "с", "к", "по", "при", "для"):
+                    reading = " ".join(wa0) + " — " + " ".join(wb0)
+                else:
+                    reading = ("от " + " ".join(wa0) +
+                               " до " + " ".join(wb0))
+                b10, b100 = b % 10, b % 100
+                pword = ("процента" if 2 <= b10 <= 4 and b100 not in (12, 13, 14)
+                         else "процентов")
+                reading += " " + pword
+                self.report.number_normalized(m.group(0), reading)
+                return " " + reading + " "
+            wa = numerals.cardinal_words(a)
+            wb = numerals.cardinal_words(b)
             # перед диапазоном уже есть предлог («в 158-160 статьях») —
-            # не добавляем свой «от … до …»
+            # не добавляем свой «от … до …»; падеж чисел — по предлогу:
+            # «в/во» — предложный, «на» — винительный, «к/по» — дательный
             before = text[:m.start()].rstrip().rsplit(" ", 1)[-1].lower()
             if before in ("в", "во", "на", "с", "к", "по", "при", "для"):
+                if before in ("в", "во"):
+                    case = "loct"
+                elif before == "на":
+                    case = "accs"
+                elif before in ("к", "по"):
+                    case = "datv"
+                else:
+                    case = "gent"
+                wa = numerals.inflect_words(wa, case)
+                wb = numerals.inflect_words(wb, case)
                 reading = " ".join(wa) + " — " + " ".join(wb)
             else:
+                wa = numerals.inflect_words(wa, "gent")
+                wb = numerals.inflect_words(wb, "gent")
                 reading = "от " + " ".join(wa) + " до " + " ".join(wb)
             self.report.number_normalized(m.group(0), reading)
             return " " + reading + " "
 
         return re.sub(r"(?<![\w-])(\d{1,4})\s*[-–—]\s*(\d{1,4})(?![\w-])"
-                      r"(\s+(?:год\w*|гг\.?|г\.))?",
+                      r"(\s+(?:год\w*|гг\.?|г\.))?(\s*%)?",
                       lambda m: repl(m), text)
 
     # ==================================================================

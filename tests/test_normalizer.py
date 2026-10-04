@@ -229,3 +229,68 @@ def test_half_decimals():
     assert "два с половиной миллиона" in out
     assert "двенадцать с половиной процентов" in out
     assert "пять с половиной килограмма" in out
+
+
+def test_legal_redaction_phrases():
+    """«в ред.» склоняется, «с изм. и доп.» разворачивается словами."""
+    n = make()
+    out = n.normalize_sentence("Закон (в ред. ФЗ от 01.09.2024) изменён.")
+    assert "в редакции" in out
+    out2 = n.normalize_sentence("Кодекс действует (с изм. и доп.) в РФ.")
+    assert "с изменениями и дополнениями" in out2
+
+
+def test_subpoint_and_chain_commas():
+    """«подп.» распознаётся; цепочка ссылок читается с запятыми-паузами."""
+    n = make()
+    out = n.normalize_sentence("см. п. 3 ч. 2 ст. 20.2 КоАП РФ")
+    assert "пункт третий, часть вторая, статья двадцать два" in out
+    out2 = n.normalize_sentence("подп. «а» п. 3 применяется")
+    assert "подпункт а" in out2
+
+
+def test_percent_ranges():
+    """«10-15%» — проценты не теряются, форма по последнему числу."""
+    n = make()
+    out = n.normalize_sentence("Ставка выросла на 10-15%.")
+    assert "десять — пятнадцать процентов" in out
+    out2 = n.normalize_sentence("Повысили на 2-3%.")
+    assert "два — три процента" in out2
+
+
+def test_paren_number_dedupe():
+    """«100 000 (сто тысяч)» — расшифровка в скобках не читается дважды."""
+    n = make()
+    out = n.normalize_sentence("Сумма 100 000 (сто тысяч) рублей взыскана.")
+    assert out.count("сто тысяч") == 1
+    out2 = n.normalize_sentence("Подано 3 (три) заявления.")
+    assert out2.count("три") == 1
+    # в скобках не число — не трогаем
+    out3 = n.normalize_sentence("Суд (первая инстанция) отказал.")
+    assert "первая инстанция" in out3
+
+
+def test_plusminus():
+    n = make()
+    out = n.normalize_sentence("Допускается отклонение ±3 мм.")
+    assert "плюс-минус три" in out
+
+
+def test_tn_agreement():
+    """«т.н.» согласуется с родом следующего слова."""
+    n = make()
+    out = n.normalize_sentence("Т.к. правила нарушены, т.н. льгота отменена.")
+    assert "так называемая льгота" in out
+    out2 = n.normalize_sentence("т.н. законность восстановлена.")
+    assert "так называемая законность" in out2
+    out3 = n.normalize_sentence("т.н. порядок восстановлен.")
+    assert "так называемый порядок" in out3
+
+
+def test_range_case_by_preposition():
+    """Падеж чисел в диапазоне — по предлогу: «в … статьях» — предложный."""
+    n = make()
+    out = n.normalize_sentence("В 158-160 статьях указано.")
+    assert "ста пятидесяти восьми" in out
+    out2 = n.normalize_sentence("Ставка от 10 до 15% выросла.")
+    assert "процент" in out2
