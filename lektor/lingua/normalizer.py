@@ -161,6 +161,8 @@ class TextNormalizer:
     def _shorts(self, text: str) -> str:
         # «±3 мм» читается словами; оставляем знак только в разметке
         text = text.replace("±", " плюс-минус ")
+        # «2010-2015 г.г.» — частая (некорректная, но живая) форма «гг.»
+        text = re.sub(r"г\.\s?г\.", "гг.", text)
         # «т.н. льгота» -> «так называемая льгота» (согласование по роду)
         def _tn(m):
             from .morphology import analyze, inflect_word

@@ -294,3 +294,31 @@ def test_range_case_by_preposition():
     assert "ста пятидесяти восьми" in out
     out2 = n.normalize_sentence("Ставка от 10 до 15% выросла.")
     assert "процент" in out2
+
+
+def test_gg_year_suffix():
+    """«2010-2015 г.г.» — некорректная, но частая форма читается как «гг.»"""
+    n = make()
+    out = n.normalize_sentence("Практика 2010-2015 г.г. обобщена.")
+    assert "годов" in out
+    assert "г. г." not in out and "гг." not in out
+
+
+def test_ps_abbreviation():
+    """«P.S.» читается по-русски, а не английскими буквами."""
+    n = make()
+    out = n.normalize_sentence("Итог подведён. P.S. Дополнение позже.")
+    assert "пэ-эс" in out
+    out2 = n.normalize_sentence("Итог. PS Дополнение.")
+    assert "пэ-эс" in out2
+
+
+def test_question_rise_segments():
+    """Полярный вопрос получает подъём интонации, вопрос со словом — нет."""
+    from lektor.config import load_settings
+    from lektor.pipeline import Pipeline
+    pipe = Pipeline(load_settings())
+    utts, _ = pipe._analyze_wrap("Вы согласны с иском?")
+    assert any(sg.question_rise for u in utts for sg in u.segments)
+    utts2, _ = pipe._analyze_wrap("Кто виновен в этом деле?")
+    assert not any(sg.question_rise for u in utts2 for sg in u.segments)

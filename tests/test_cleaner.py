@@ -77,3 +77,25 @@ def test_internet_dash():
     # дефис внутри слова не трогаем
     out2 = c.clean("какой-то пункт по-прежнему читается слитно.")
     assert "какой-то" in out2 and "по-прежнему" in out2
+
+
+def test_ascii_quotes_to_guillemets():
+    """Парные ASCII-кавычки превращаются в «ёлочки»."""
+    c = make()
+    out = c.clean('Он сказал "довольно" и ушёл.')
+    assert "«довольно»" in out
+    assert '"' not in out
+    # уже типографские кавычки не трогаем
+    out2 = c.clean("Он сказал «довольно» и ушёл.")
+    assert "«довольно»" in out2
+
+
+def test_ascii_quotes_keep_ssml():
+    """Кавычки внутри SSML-тегов не превращаются в ёлочки."""
+    c = make()
+    out = c.clean('Фраза <break time="700ms"/> продолжается. Он сказал "довольно".')
+    assert 'time="700ms"' in out
+    assert "«довольно»" in out
+    # пара кавычек через тег не разваливается
+    out2 = c.clean('Он сказал "слова <emphasis>жирно</emphasis> дальше" и ушёл.')
+    assert out2.count("«") == 1 and out2.count("»") == 1

@@ -29,6 +29,10 @@ class Cleaner:
         text = text.replace("\ufeff", "")
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         text = re.sub(r"[\u200b\u200c\u200d\u00ad]", "", text)
+        # парные ASCII-кавычки -> «ёлочки» (в русских текстах "..." — брак
+        # вёрстки после копирования из Word/интернета);
+        # ВНУТРИ тегов <...> кавычки не трогаем (SSML: time="700ms")
+        text = self._fix_ascii_quotes(text)
         # интернет-тире: «слово -- слово» и «слово - слово» -> «слово — слово»
         text = re.sub(r"\s--+\s", " — ", text)
         text = re.sub(r"(?<=[а-яёА-ЯЁ»])\s-\s(?=[а-яёА-ЯЁ«])", " — ", text)
@@ -51,6 +55,36 @@ class Cleaner:
     def _dehyphenate(text: str) -> str:
         """Склейка переносов: «суде-\nбного» -> «судебного»."""
         return re.sub(r"([а-яё])[-–]\s*\n\s*([а-яё])", r"\1\2", text, flags=re.IGNORECASE)
+
+    def _fix_ascii_quotes(self, text: str) -> str:
+        """'"...' -> «...»: парные ASCII-кавычки становятся ёлочками.
+
+        Теги <...> пропускаем целиком — кавычки атрибутов SSML священны.
+        Состояние открыт/закрыт переносится через теги, чтобы пара
+        "слова <b>жирно</b>" не развалилась.
+        """
+        if '"' not in text:
+            return text
+        parts = re.split(r"(<[^>]*>)", text)
+        opening = [True]
+
+        def flip(seg: str) -> str:
+            if '"' not in seg:
+                return seg
+            out = []
+            for ch in seg:
+                if ch == '"':
+                    out.append("«" if opening[0] else "»")
+                    opening[0] = not opening[0]
+                else:
+                    out.append(ch)
+            return "".join(out)
+
+        for i, part in enumerate(parts):
+            if len(part) > 2 and part.startswith("<") and part.endswith(">"):
+                continue
+            parts[i] = flip(part)
+        return "".join(parts)
 
     def _remove_noise(self, text: str) -> str:
         lines = text.splitlines()

@@ -86,6 +86,8 @@ class App(ctk.CTk):
 
         ctk.CTkButton(top, text="Разметка", width=90,
                       command=self.show_markup).pack(side="right", padx=3)
+        ctk.CTkButton(top, text="Озвучить папку…", width=125,
+                      command=self.batch_folder).pack(side="right", padx=3)
         ctk.CTkButton(top, text="Открыть файл…", width=110, command=self.open_file).pack(side="right", padx=3)
         ctk.CTkButton(top, text="Пример", width=80, command=self.insert_example).pack(side="right", padx=3)
         ctk.CTkButton(top, text="Очистить", width=80, command=lambda: self.txt.delete("1.0", "end")).pack(side="right", padx=3)
@@ -508,6 +510,75 @@ class App(ctk.CTk):
         self._worker = threading.Thread(target=work, daemon=True)
         self._worker.start()
 
+    # ==================================================================
+    # Пакетная озвучка папки (как в консоли: python -m lektor папка)
+    # ==================================================================
+    def batch_folder(self):
+        if self._worker and self._worker.is_alive():
+            messagebox.showinfo("Лектор", "Дождитесь окончания текущей озвучки.")
+            return
+        from tkinter import filedialog
+        folder = filedialog.askdirectory(title="Папка с текстами для озвучки")
+        if not folder:
+            return
+        from ..textproc.files import SUPPORTED
+        names = sorted(
+            f for f in os.listdir(folder)
+            if os.path.splitext(f)[1].lower() in SUPPORTED
+            and not f.startswith("~$"))
+        if not names:
+            messagebox.showinfo(
+                "Лектор",
+                "В папке нет поддерживаемых файлов:\n"
+                + ", ".join(SUPPORTED))
+            return
+        if not messagebox.askyesno(
+                "Лектор",
+                f"Озвучить {len(names)} файл(ов) из папки?\n\n{folder}\n\n"
+                "Каждый файл станет отдельным аудио в папке «Аудиолекции»."
+                " Отмена — по кнопке «Отменить» (текущий файл будет дочитан)."):
+            return
+        settings = self._collect_settings()
+        self._cancel.clear()
+        self.btn_go.configure(state="disabled")
+        self.btn_cancel.configure(state="normal")
+        self.progress.set(0)
+        self.lbl_status.configure(text=f"Пакет: 0/{len(names)}")
+
+        def progress(stage: str, frac: float, msg: str):
+            self._queue.put(("progress", stage, frac, msg))
+
+        def work():
+            from ..pipeline import Pipeline
+            from ..textproc.files import read_file
+            pipe = Pipeline(settings, progress=progress,
+                            cancel_event=self._cancel,
+                            log=lambda m: self._queue.put(("log", m)))
+            ok = fail = 0
+            for i, name in enumerate(names, 1):
+                if self._cancel.is_set():
+                    break
+                base = (i - 1) / len(names)
+                self._queue.put(("progress", f"файл {i}/{len(names)}",
+                                 base, name[:60]))
+                self._queue.put(("log", f"[{i}/{len(names)}] {name}"))
+                try:
+                    res = pipe.run(read_file(os.path.join(folder, name)),
+                                   os.path.splitext(name)[0])
+                    if res.audio_path:
+                        ok += 1
+                        self._queue.put(("log",
+                                         f"  готово: {os.path.basename(res.audio_path)}"))
+                    else:
+                        fail += 1
+                except Exception as e:
+                    fail += 1
+                    self._queue.put(("log", f"  ошибка: {e}"))
+            self._queue.put(("batch_done", ok, fail, len(names)))
+
+        self._worker = threading.Thread(target=work, daemon=True)
+        self._worker.start()
+
     def cancel_job(self):
         self._cancel.set()
         self.lbl_status.configure(text="Останавливаю после текущей реплики…")
@@ -552,6 +623,18 @@ class App(ctk.CTk):
                     else:
                         self.lbl_status.configure(text="Проба голоса…")
                         self._play_wav(wav)
+                elif kind == "batch_done":
+                    ok, fail, total = item[1], item[2], item[3]
+                    self.btn_go.configure(state="normal")
+                    self.btn_cancel.configure(state="disabled")
+                    if ok:
+                        self.progress.set(1.0)
+                    self.lbl_status.configure(
+                        text=f"Пакет готов: {ok} из {total} файл(ов)"
+                             + (f", ошибок: {fail}" if fail else ""))
+                    self._log(f"Пакетная озвучка завершена: {ok} из {total}.")
+                    if self.settings.open_folder:
+                        self.open_folder()
                 elif kind == "done":
                     res, err = item[1], item[2]
                     self.btn_go.configure(state="normal")
