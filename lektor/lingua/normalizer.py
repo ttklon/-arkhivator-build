@@ -167,6 +167,13 @@ class TextNormalizer:
         text = text.replace("±", " плюс-минус ")
         # «2010-2015 г.г.» — частая (некорректная, но живая) форма «гг.»
         text = re.sub(r"г\.\s?г\.", "гг.", text)
+        # «150 л.с.» — лошадиные силы (не «лист эс»)
+        text = re.sub(r"(?<![\w.])л\.\s?с\.(?!\w)", " лошадиных сил ", text)
+        # «3000 об/мин» — обороты в минуту
+        text = re.sub(r"(?<![\w.])об/мин(?!\w)", " оборотов в минуту ", text)
+        # «250 кВт·ч» — киловатт-часы (любой разделитель: ·, *, .)
+        text = re.sub(r"(?i)(?<![\w.])квт\s*[·*.]\s*ч(?![а-яё])",
+                      " киловатт-часов ", text)
         # «т.н. льгота» -> «так называемая льгота» (согласование по роду)
         def _tn(m):
             from .morphology import analyze, inflect_word
@@ -193,6 +200,7 @@ class TextNormalizer:
     # 2. Статьи, части, пункты (тр. 24)
     _REF_WORD = r"(?:ст|статья|статьи|статьёй|статьей|статью|ч|часть|части|частью|п|пп|подп|пункт|пункта|пунктом|пункту|пункты|подпункт|подпункта|подпунктом|абз|абзац|абзаца|абзацем|л|лист|листа|листу|гл|глава|главы|главой|разд|раздел|раздела|разделом|корп|кв|эт)"
     _REF_ITEM = (r"(?:\d+(?:\.\d+)+"      # цепочка «20.2», «3.5.1» — подраздел
+                 r"|\d+\s*[-–—]\s*\d+"     # диапазон «159-161»
                  r"|\d+|[«\"'][а-яё][»\"']|[а-яё])"
                  r"(?=[)\]},;:!?…\s»]|$|\.(?!\d))")
 
@@ -246,6 +254,12 @@ class TextNormalizer:
                     " ".join(numerals.cardinal_words(int(g)))
                     for g in value_clean.split("."))
                 reading = f"{prefix} {spoken}"
+            elif re.fullmatch(r"\d+\s*[-–—]\s*\d+", value_clean):
+                # диапазон номеров: «ст. 159-161» -> «статья сто
+                # пятьдесят девять — сто шестьдесят один»
+                a_, b_ = (int(x) for x in re.split(r"[-–—]", value_clean))
+                reading = (f"{prefix} " + " ".join(numerals.cardinal_words(a_))
+                           + " — " + " ".join(numerals.cardinal_words(b_)))
             elif value_clean.isdigit():
                 n = int(value_clean)
                 if numtype == "card":
@@ -562,7 +576,25 @@ class TextNormalizer:
 
         rx = (r"(?<![\d\w])(\d{1,4})\s*[-–—]\s*"
               r"(й|го|му|ти|м|я|ю|е|х|ми)(?![а-яё\w-])\s*(комнат\w*)?")
-        return re.sub(rx, lambda m: repl(m), text)
+        text = re.sub(rx, lambda m: repl(m), text)
+
+        # «3-летний», «5-дневный», «25-летие» -> «трёхлетний»,
+        # «пятидневный», «двадцатипятилетие»: числительное в составной
+        # форме (родительный падеж) приклеивается к основе
+        def compound_repl(m):
+            n = int(m.group(1))
+            words = numerals.inflect_words(numerals.cardinal_words(n), "gent")
+            if words and words[-1] == "одного":
+                words[-1] = "одно"      # «1-комнатная» -> «однокомнатная»
+            elif words and words[-1] == "ста":
+                words[-1] = "сто"       # «100-летний» -> «столетний»
+            reading = "".join(words) + m.group(2)
+            self.report.number_normalized(m.group(0), reading)
+            return " " + reading + " "
+
+        text = re.sub(r"(?<![\w-])(\d{1,4})-([а-яё]{3,})(?![\w-])",
+                      compound_repl, text)
+        return text
 
     # ==================================================================
     # 6б. Единицы измерения: «23 кг», «60 км/ч», «100 м²», «−5 °C»
@@ -621,6 +653,9 @@ class TextNormalizer:
             # квадратные метры: «м²», «м2», «кв. м» (но не «кВт»!)
             if key in ("м²", "м2", "м^2") or re.fullmatch(r"кв\.?\s*м", key):
                 return " " + self._square_meters(raw, m.group(0)) + " "
+            # кубические метры: «м³», «м3», «куб. м»
+            if key in ("м³", "м3", "м^3") or re.fullmatch(r"куб\.?\s*м", key):
+                return " " + self._cubic_meters(raw, m.group(0)) + " "
             forms, gender = self._MEASURES[key]
             if "." in raw:
                 ip, fr = raw.split(".", 1)
@@ -639,6 +674,7 @@ class TextNormalizer:
         # «В.» (вольт) не должен превращаться в «век» — это делает _shorts
         rx_multi = re.compile(
             r"(\d+(?:[.,]\d+)?)\s*(км/час|км/ч|м\u00b2|м2|м\^2|кв\.?\s*м|"
+            r"м\u00b3|м3|м\^3|куб\.?\s*м|"
             r"кг|мг|км|см|мм|мл|гб|мб|кб|тб|гц|мгц|кгц|квт|вт)"
             r"(?![а-яёА-ЯЁa-zA-Z])", re.IGNORECASE)
         # одиночные строчные («5 г», «10 м») и заглавные («220 В», «12 А»)
@@ -658,6 +694,18 @@ class TextNormalizer:
             unit = "квадратных " + self._plural_unit(n, ("метр", "метра", "метров"))
         else:
             unit = "квадратный метр"
+        reading = " ".join(words) + " " + unit
+        self.report.number_normalized(orig, reading)
+        return reading
+
+    def _cubic_meters(self, raw: str, orig: str) -> str:
+        n = int(raw.replace(",", "").replace(".", "")) if "." not in raw and "," not in raw \
+            else int(float(raw.replace(",", ".")))
+        words = numerals.cardinal_words(n)
+        if 11 <= n % 100 <= 14 or n % 10 not in (1,):
+            unit = "кубических " + self._plural_unit(n, ("метр", "метра", "метров"))
+        else:
+            unit = "кубический метр"
         reading = " ".join(words) + " " + unit
         self.report.number_normalized(orig, reading)
         return reading
@@ -957,17 +1005,24 @@ class TextNormalizer:
     def _money_time_percent(self, text: str) -> str:
         def money_repl(m):
             n = int(m.group(1).replace(" ", "").replace("\u00a0", ""))
-            cur = m.group(2).lower().rstrip(".")
+            cur = (m.group(3) or "").lower().rstrip(".")
+            # «100 000,50 руб.» — сумма с копейками
+            kop = int(m.group(2)) if m.group(2) else None
             if cur in ("₽", "р", "руб", "рубль", "рубля", "рублей"):
                 reading = " ".join(numerals.rubles_words(n))
+                if kop:
+                    reading += " " + " ".join(numerals.kopecks_words(kop))
             elif cur.startswith("коп"):
                 reading = " ".join(numerals.kopecks_words(n))
             else:
-                reading = " ".join(numerals.cardinal_words(n)) + " " + m.group(2).rstrip(".")
+                reading = " ".join(numerals.cardinal_words(n)) + " " + (m.group(3) or "").rstrip(".")
+                if kop:
+                    reading += " целых " + " ".join(numerals.cardinal_words(kop))
             self.report.number_normalized(m.group(0), reading)
             return " " + reading + " "
 
-        text = re.sub(r"(\d[\d\u00a0 ]*)\s*(₽|рублей|рубля|рубль|руб\.?|р\.|копейки|копеек|коп\.?)",
+        text = re.sub(r"(\d[\d\u00a0 ]*)(?:\s*,\s*(\d{1,2}))?\s*"
+                      r"(₽|рублей|рубля|рубль|руб\.?|р\.|копейки|копеек|коп\.?)",
                       money_repl, text)
 
         def pct_repl(m):
@@ -1030,7 +1085,11 @@ class TextNormalizer:
             if not frac:
                 window = text[max(0, m.start() - 16):m.start()].upper()
                 id_ctx = re.search(r"(ИНН|ОГРН\w*|СНИЛС|КПП|БИК)\s*[:№]?\s*$", window)
-                if len(digits) >= 7 or (len(digits) in (5, 6) and id_ctx):
+                # разделители разрядов пробелом — признак «человеческого»
+                # числа («1 500 000»), а не номера счёта
+                has_sep = " " in m.group(1) or "\u00a0" in m.group(1)
+                if ((len(digits) >= 7 and not has_sep)
+                        or (len(digits) in (5, 6) and id_ctx)):
                     reading = self._digits_spoken(digits)
                     self.report.number_normalized(raw.replace("\u00a0", " "), reading)
                     return " " + reading + " "

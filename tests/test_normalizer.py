@@ -52,7 +52,9 @@ def test_abbreviation_first_use():
 def test_ranges():
     n = make()
     out = n.normalize_sentence("Статьи 158-160 применяются вместе.")
-    assert "от ста пятидесяти восьми до ста шестидесяти" in out
+    # цепочка ссылок читается по-цитатному: «статьи сто пятьдесят
+    # восемь — сто шестьдесят», а не «от ста пятидесяти восьми…»
+    assert "статьи сто пятьдесят восемь — сто шестьдесят" in out
 
 
 def test_shorts():
@@ -387,3 +389,56 @@ def test_usa_abbreviation():
     n = make()
     out = n.normalize_sentence("Практика США учтена.")
     assert "эс шэ а" in out
+
+
+def test_money_with_kopecks():
+    """«100 000,50 руб.» — сумма с копейками, а не развалившийся хвост."""
+    n = make()
+    out = n.normalize_sentence("Взыскать 100 000,50 руб. с ответчика.")
+    assert "сто тысяч рублей пятьдесят копеек" in out
+    out2 = n.normalize_sentence("Долг 1 500 000,00 руб. погашен.")
+    assert "один миллион пятьсот тысяч рублей" in out2
+    assert "ноль" not in out2
+
+
+def test_human_numbers_with_spaces():
+    """«2 500 000» с разделителями — человеческое число, не номер счёта."""
+    n = make()
+    out = n.normalize_sentence("Прибыль 2 500 000 направлена в фонд.")
+    assert "два миллиона пятьсот тысяч" in out
+    # ИНН без пробелов — по-прежнему поцифрово
+    out2 = n.normalize_sentence("ИНН 770123456789 присвоен.")
+    assert "семь семь ноль" in out2
+
+
+def test_hyphen_compound_words():
+    """«3-летний» -> «трёхлетний», «25-летие» -> «двадцатипятилетие»."""
+    n = make()
+    out = n.normalize_sentence("Установлен 3-летний срок давности.")
+    assert "трёхлетний" in out
+    out2 = n.normalize_sentence("Отмечается 25-летие закона.")
+    assert "двадцатипятилетие" in out2
+    out3 = n.normalize_sentence("Квартира 1-комнатная куплена.")
+    assert "однокомнатная" in out3
+    # «3-х комнатная» (через пробел) не сломалось
+    out4 = n.normalize_sentence("Куплена 3-х комнатная квартира.")
+    assert "трёхкомнатная" in out4
+
+
+def test_article_number_ranges():
+    """«ст. 159-161» — диапазон статей читается в цитатной форме."""
+    n = make()
+    out = n.normalize_sentence("Действия квалифицированы по ст. 159-161 УК РФ.")
+    assert "статье сто пятьдесят девять — сто шестьдесят один" in out
+
+
+def test_technical_units():
+    """л.с., об/мин, кВт·ч, куб. м, м³."""
+    n = make()
+    assert "лошадиных сил" in n.normalize_sentence("Двигатель 150 л.с. установлен.")
+    assert "оборотов в минуту" in n.normalize_sentence("Вал вращается 3000 об/мин.")
+    assert "киловатт-часов" in n.normalize_sentence("Расход 250 кВт·ч в месяц.")
+    assert "кубических метров" in n.normalize_sentence("Заказано 12 куб. м бетона.")
+    assert "кубических метров" in n.normalize_sentence("Объём 25 м³.")
+    # «кв. м» не сломался
+    assert "квадратных метров" in n.normalize_sentence("Квартира 45 кв. м.")
