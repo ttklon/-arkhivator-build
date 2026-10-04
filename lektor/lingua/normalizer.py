@@ -174,6 +174,12 @@ class TextNormalizer:
         text = re.sub(r"(?<![\w.])об/мин(?!\w)", " оборотов в минуту ", text)
         # «и/или» из договоров — читается слитно, без паузы на дроби
         text = re.sub(r"(?i)и/или", " и или ", text)
+        # «Т-34», «Су-27», «Ил-76», «ФЗ-152» — обозначение техники и
+        # документов: дефис не должен звучать паузой
+        text = re.sub(r"(?<![а-яё0-9-])([А-ЯЁ][А-ЯЁа-яё]{0,3})-(\d{1,4})(?!\d)",
+                      r" \1 \2 ", text)
+        # «18+» — плюс после числа читается словом (но «+7 926…» не трогаем)
+        text = re.sub(r"(?<=\d)\+(?!\d)", " плюс ", text)
         # «в 12 ч. 30 мин.» -> «12:30»; дальше обычный проход времени
         # (порядок важен: «ч.» иначе разбирается как ссылка «часть»)
         def hm_norm(m):
@@ -444,6 +450,23 @@ class TextNormalizer:
             self.report.number_normalized(m.group(0), spoken + " " + g3)
             return " " + (prep_raw + " " if prep else "") + spoken + \
                 (" " + g3 if g3 else "") + " "
+
+        # «с 2020 по 2024 год» — оба конца порядковые:
+        # «с две тысячи двадцатого по две тысячи двадцать четвёртый год»
+        def year_range_repl(m):
+            a, b = int(m.group(2)), int(m.group(3))
+            if not (1000 <= a <= 2100 and 1000 <= b <= 2100):
+                return m.group(0)
+            wa = numerals.year_words(a, "gent")
+            wb = numerals.year_words(b, "accs")
+            g4 = m.group(4).rstrip(".")
+            reading = (m.group(1) + " " + " ".join(wa)
+                       + " по " + " ".join(wb) + " " + g4)
+            self.report.number_normalized(m.group(0), reading)
+            return " " + reading + " "
+
+        text = re.sub(r"\b(с|со|от)\s+(\d{4})\s+по\s+(\d{4})\s+(год[ауе]?\w*|г\.)",
+                      year_range_repl, text, flags=re.IGNORECASE)
 
         text = re.sub(r"\b(в|во|на|с|от|до|по|к)?\s*(\d{4})\s*(год[ауе]?\w*|г\.)",
                       year_repl, text, flags=re.IGNORECASE)
@@ -990,10 +1013,22 @@ class TextNormalizer:
                     reading += " " + " ".join(numerals.year_words(y, "gent")) + " года"
                 else:
                     reading += " " + " ".join(numerals.cardinal_words(y)) + " года"
+
+            # хвост «г.» / «года» после полной даты не читается вторым
+            # «года»: «от 21.01.2025 г.» уже кончается «…двадцать пятого
+            # года». Но «12.03.2021 г. Москва» — здесь «г.» значит город
+            if has_year:
+                tail = (m.group(4) or "").strip()
+                nxt = m.string[m.end():].lstrip()[:1]
+                if tail and (tail.lower().startswith("года")
+                             or (tail.rstrip(".") == "г" and not nxt.isupper())):
+                    self.report.number_normalized(m.group(0), reading)
+                    return " " + reading + " "
             self.report.number_normalized(m.group(0), reading)
             return " " + reading + " "
 
-        rx = r"(?<![\d.])(\d{1,2})\.(\d{1,2})(?:\.(\d{4}|\d{2}))?(?!\d)(?!\.\d)"
+        rx = (r"(?<![\d.])(\d{1,2})\.(\d{1,2})(?:\.(\d{4}|\d{2}))?"
+              r"(?!\d)(?!\.\d)(\s*(?:года|г\.?))?(?=[^А-ЯЁ]|$)")
         text = re.sub(rx, lambda m: repl(m), text)
 
         # «п. 3.5», «ст. 20.2» — номер подраздела: «пункт три пять»
@@ -1126,6 +1161,9 @@ class TextNormalizer:
             case = "nomn"
             before = text[:m.start()].rstrip()
             prev_word = before.split()[-1].lower() if before.split() else ""
+            # «не более 3 лет» — родительный падеж после сравнительной
+            if prev_word in ("более", "менее", "свыше"):
+                case = "gent"
             p = analyze(prev_word)
             if p is not None and p.tag and p.tag.POS == "PREP":
                 # ищем существительное после числа

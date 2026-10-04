@@ -482,3 +482,50 @@ def test_and_or_slash():
     n = make()
     out = n.normalize_sentence("Продавец и/или покупатель подписывают.")
     assert "и или" in out
+
+
+def test_date_with_year_suffix():
+    """«от 21.01.2025 г.» — без двойного «года»; «г. Москва» — город."""
+    n = make()
+    out = n.normalize_sentence("Приказ от 21.01.2025 г. подписан.")
+    assert "двадцать пятого года подписан" in out
+    assert out.count("года") == 1
+    out2 = n.normalize_sentence("Закон от 12.03.2021 года действует.")
+    assert out2.count("года") == 1
+    out3 = n.normalize_sentence("Отпуск с 01.09.2024 г. по 30.06.2025 г. оформлен.")
+    assert "четвёртого года по тридцатому июня" in out3
+
+
+def test_year_range_with_po():
+    """«с 2020 по 2024 год» — оба года порядковые."""
+    n = make()
+    out = n.normalize_sentence("За период с 2020 по 2024 год проверено.")
+    assert "с две тысячи двадцатого по две тысячи двадцать четвёртый год" in out
+
+
+def test_comparison_genitive():
+    """«не более 3 лет» — родительный падеж."""
+    n = make()
+    out = n.normalize_sentence("Срок не более 3 лет установлен.")
+    assert "не более трёх лет" in out
+    out2 = n.normalize_sentence("Не менее 2 лет действует.")
+    assert "двух лет" in out2
+    out3 = n.normalize_sentence("Свыше 100 дел рассмотрено.")
+    assert "ста дел" in out3
+
+
+def test_technical_designations():
+    """«Т-34», «Су-27», «ФЗ-152» — дефис не звучит паузой."""
+    n = make()
+    out = n.normalize_sentence("Танк Т-34 сохранился, самолёт Су-27 тоже.")
+    assert "тридцать четыре" in out and "двадцать семь" in out
+    # «Г-н Иванов» не сломался (дефис с маленькой буквы)
+    out2 = n.normalize_sentence("Г-н Иванов обратился.")
+    assert "господин" in out2
+
+
+def test_plus_after_number():
+    """«18+» читается «восемнадцать плюс», «+7 …» не трогается."""
+    n = make()
+    out = n.normalize_sentence("Материал 18+ помечен.")
+    assert "восемнадцать плюс" in out
