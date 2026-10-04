@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 if not exist ".venv\Scripts\pythonw.exe" (
-  echo οΏ½οΏ½οΏ½η «οΏ½ οΏ½οΏ½οΏ½οΏ½οΏ½οΏ½οΏ½ install.bat - οΏ½οΏ½ οΏ½οΏ½οΏ½ οΏ½οΏ½β ­οΏ½οΏ½οΏ½οΏ½.
+  echo ‘­ η «  § ―γαβ¨β¥ install.bat - ®­ Άαρ γαβ ­®Ά¨β.
   pause
   exit /b 1
 )

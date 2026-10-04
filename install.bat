@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableDelayedExpansion
-title я┐╜я┐╜я┐╜я┐╜я┐╜ - я┐╜я┐╜таня┐╜я┐╜я┐╜я┐╜
+title Лектор - установка
 cd /d "%~dp0"
 
 echo ==========================================================
-echo   я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜: я┐╜я┐╜таня┐╜я┐╜я┐╜я┐╜ - я┐╜я┐╜я┐╜я┐╜ раз, я┐╜ужея┐╜ я┐╜я┐╜я┐╜рнея┐╜, ~10 я┐╜я┐╜я┐╜я┐╜я┐╜
-echo   я┐╜я┐╜я┐╜я┐╜я┐╜ я┐╜рограмя┐╜я┐╜ я┐╜удея┐╜ рабя┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ я┐╜флая┐╜я┐╜
+echo   ЛЕКТОР: установка - один раз, нужен интернет, ~10 минут
+echo   Дальше программа будет работать полностью офлайн
 echo ==========================================================
 echo.
 
@@ -14,7 +14,7 @@ set "PY=%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
 if not exist "!PY!" (
   where python >nul 2>nul
   if not errorlevel 1 (
-    rem я┐╜ропя┐╜ская┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ Microsoft Store я┐╜я┐╜ WindowsApps
+    rem пропускаем заглушку Microsoft Store из WindowsApps
     for /f "delims=" %%i in ('where python') do (
       echo %%i | findstr /I "WindowsApps" >nul || if not exist "!PY!" set "PY=%%i"
     )
@@ -27,76 +27,76 @@ if not exist "!PY!" (
   )
 )
 if not exist "!PY!" (
-  echo Python я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜. я┐╜я┐╜таня┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ Python 3.11 я┐╜рез winget...
+  echo Python не найден. Устанавливаю Python 3.11 через winget...
   winget install -e --id Python.Python.3.11 --scope user --silent --accept-package-agreements --accept-source-agreements
   set "PY=%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
 )
 if not exist "!PY!" (
   echo.
-  echo я┐╜я┐╜ удая┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜ я┐╜я┐╜таня┐╜я┐╜я┐╜я┐╜я┐╜ Python.
-  echo я┐╜я┐╜таня┐╜я┐╜я┐╜я┐╜ Python 3.11 я┐╜ сайя┐╜ python.org/downloads/ я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ install.bat сноя┐╜я┐╜.
-  echo я┐╜я┐╜я┐╜я┐╜я┐╜: я┐╜я┐╜ я┐╜я┐╜таня┐╜я┐╜я┐╜я┐╜ я┐╜тмея┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ Add python.exe to PATH.
+  echo Не удалось найти или установить Python.
+  echo Установите Python 3.11 с сайта python.org/downloads/ и запустите install.bat снова.
+  echo ВАЖНО: при установке отметьте галочку Add python.exe to PATH.
   pause
   exit /b 1
 )
-echo я┐╜споя┐╜я┐╜я┐╜я┐╜ Python: !PY!
+echo Использую Python: !PY!
 echo.
 
-REM ---------- я┐╜я┐╜я┐╜я┐╜уальноя┐╜ я┐╜я┐╜я┐╜ужея┐╜я┐╜я┐╜ ----------
+REM ---------- виртуальное окружение ----------
 if not exist ".venv\Scripts\python.exe" (
-  echo я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜ровя┐╜я┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜ужея┐╜я┐╜я┐╜ .venv ...
+  echo Создаю изолированное окружение .venv ...
   "!PY!" -m venv .venv
 )
 set "VPY=.venv\Scripts\python.exe"
 if not exist "!VPY!" (
-  echo я┐╜я┐╜ удая┐╜я┐╜я┐╜я┐╜ созя┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜ужея┐╜я┐╜я┐╜. я┐╜ровя┐╜я┐╜я┐╜я┐╜, я┐╜я┐╜ Python я┐╜я┐╜таня┐╜я┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜ректно.
+  echo Не удалось создать окружение. Проверьте, что Python установлен корректно.
   pause
   exit /b 1
 )
 
 "!VPY!" -m pip install --upgrade pip
 
-REM ---------- PyTorch: я┐╜скореня┐╜я┐╜ только я┐╜я┐╜я┐╜ NVIDIA; я┐╜я┐╜я┐╜ AMD я┐╜ Intel - CPU ----------
-for /f "delims=" %%i in ('powershell -NoProfile -Command "(Get-CimInstance Win32_VideoController | Select-Object -First 1).Name" 2^>nul') do echo я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜: %%i
+REM ---------- PyTorch: ускорение только для NVIDIA; для AMD и Intel - CPU ----------
+for /f "delims=" %%i in ('powershell -NoProfile -Command "(Get-CimInstance Win32_VideoController | Select-Object -First 1).Name" 2^>nul') do echo Найдена видеокарта: %%i
 nvidia-smi >nul 2>nul
 if not errorlevel 1 (
-  echo я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ NVIDIA: я┐╜тавя┐╜я┐╜ PyTorch я┐╜ я┐╜скореня┐╜я┐╜я┐╜, ~2.5 я┐╜я┐╜
+  echo Видеокарта NVIDIA: ставлю PyTorch с ускорением, ~2.5 ГБ
   "!VPY!" -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126
 ) else (
-  echo я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜ NVIDIA - я┐╜я┐╜ AMD я┐╜я┐╜я┐╜ Intel, я┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜ я┐╜я┐╜я┐╜.
-  echo я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜ я┐╜скореня┐╜я┐╜ PyTorch я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜упня┐╜: я┐╜тавя┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ CPU-я┐╜я┐╜риая┐╜я┐╜.
-  echo я┐╜я┐╜ я┐╜я┐╜я┐╜шно: я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ Silero я┐╜тлично я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜ рабя┐╜таея┐╜ я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜.
+  echo Видеокарта не NVIDIA - это AMD или Intel, либо её нет.
+  echo Для них ускорение PyTorch недоступно: ставлю компактный CPU-вариант.
+  echo Не страшно: движок Silero отлично и быстро работает на процессоре.
   "!VPY!" -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 )
 if errorlevel 1 (
   echo.
-  echo я┐╜я┐╜ удая┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜таня┐╜я┐╜я┐╜я┐╜я┐╜ PyTorch. я┐╜ровя┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜рнея┐╜ я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ install.bat сноя┐╜я┐╜.
+  echo Не удалось установить PyTorch. Проверьте интернет и запустите install.bat снова.
   pause
   exit /b 1
 )
 
 echo.
-echo я┐╜я┐╜таня┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜текя┐╜ я┐╜я┐╜рабя┐╜тки текя┐╜я┐╜ я┐╜ я┐╜удия┐╜...
+echo Устанавливаю библиотеки обработки текста и аудио...
 "!VPY!" -m pip install -r requirements.txt
 if errorlevel 1 (
   echo.
-  echo я┐╜шибя┐╜я┐╜ я┐╜я┐╜таня┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜тек. я┐╜ровя┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜рнея┐╜ я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ install.bat сноя┐╜я┐╜.
+  echo Ошибка установки библиотек. Проверьте интернет и запустите install.bat снова.
   pause
   exit /b 1
 )
 
 echo.
-echo я┐╜я┐╜я┐╜чивя┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜совя┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ Silero, ~130 я┐╜я┐╜, я┐╜я┐╜ценя┐╜я┐╜я┐╜ MIT, 29 я┐╜я┐╜я┐╜я┐╜сов ...
+echo Скачиваю голосовую модель Silero, ~130 МБ, лицензия MIT, 29 голосов ...
 "!VPY!" -m lektor.download_models
 echo.
-echo я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜теля┐╜я┐╜ HD-я┐╜я┐╜я┐╜я┐╜я┐╜ Chatterbox - я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜, я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜:
+echo Дополнительный HD-голос Chatterbox - по желанию, командой:
 echo     .venv\Scripts\python.exe -m lektor.download_models --chatterbox
-echo я┐╜я┐╜ NVIDIA я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜; я┐╜я┐╜ AMD я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ - рабя┐╜таея┐╜, я┐╜я┐╜ собя┐╜раея┐╜
-echo я┐╜удия┐╜ я┐╜ 5-10 раз я┐╜я┐╜я┐╜я┐╜я┐╜ реая┐╜ьноя┐╜я┐╜ я┐╜ремя┐╜я┐╜я┐╜. я┐╜сноя┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ - Silero.
+echo На NVIDIA он быстрый; на AMD и процессоре - работает, но собирает
+echo аудио в 5-10 раз дольше реального времени. Основной движок - Silero.
 echo.
 
 echo ==========================================================
-echo   я┐╜я┐╜таня┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜шеня┐╜.
-echo   я┐╜я┐╜я┐╜я┐╜ская┐╜я┐╜ я┐╜рограмя┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜ я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜: я┐╜я┐╜я┐╜я┐╜я┐╜я┐╜.bat
+echo   Установка завершена.
+echo   Запускайте программу двойным кликом: ЛЕКТОР.bat
 echo ==========================================================
 pause
