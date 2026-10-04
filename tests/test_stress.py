@@ -117,3 +117,19 @@ def test_shared_accentor_model():
     # либо обе None (нет модели), либо один и тот же объект
     assert acc1 is acc2
     assert StressAssigner._shared_acc_tried
+
+
+def test_zamok_muka_homographs():
+    """«замок на воротах» — замо́к; «феодальный замок» — за́мок;
+    «пшеничная мука» — мукá; «муки ожидания» — му́ки."""
+    from lektor.report import Report
+    from lektor.lingua.stress import StressAssigner
+    sa = StressAssigner(Report())
+    out = sa.stress_sentence("Замок на воротах сорван.")
+    assert "Зам+ок" in out
+    out2 = sa.stress_sentence("Феодальный замок разрушен.")
+    assert "з+амок" in out2
+    out3 = sa.stress_sentence("Пшеничная мука изъята.")
+    assert "мук+а" in out3
+    out4 = sa.stress_sentence("Муки ожидания описаны.")
+    assert "М+уки" in out4

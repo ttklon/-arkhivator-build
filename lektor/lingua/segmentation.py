@@ -242,11 +242,13 @@ class Segmenter:
     def _homogeneous(a: W, b: W) -> bool:
         if a.pos in ("NOUN", "ADJ", "NUM", "VERB", "ADV") and a.pos == b.pos:
             if a.pos in ("NOUN", "ADJ", "NUM"):
-                # у неодушевлённых винительный совпадает с именительным:
-                # «взыскать неустойку, проценты» — однородные, хоть падежи
-                # размечены accs и nomn
-                return (a.case == b.case or not a.case or not b.case
-                        or {a.case, b.case} <= {"nomn", "accs"})
+                # case может быть строкой, объектом pymorphy или пустым —
+                # приводим к строке (у неодушевлённых винительный
+                # совпадает с именительным: «неустойку, проценты»)
+                ac = str(a.case or "")
+                bc = str(b.case or "")
+                return (ac == bc or not ac or not bc
+                        or {ac, bc} <= {"nomn", "accs"})
             return True
         return False
 

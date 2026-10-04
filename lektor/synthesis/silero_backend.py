@@ -249,9 +249,17 @@ class SileroBackend(Backend):
             if seg.question_rise:
                 words_list = inner.split(" ")
                 if len(words_list) >= 1:
-                    last = words_list[-1]
-                    if last.strip(".,!?;:…«»"):
-                        words_list[-1] = f'<prosody pitch="x-high">{last}</prosody>'
+                    # «Подтверждаете ли вы…» — подъём на слове ПЕРЕД «ли»
+                    # (смысловой глагол), как в живой речи; обычный полярный
+                    # вопрос — подъём на последнем слове
+                    li = next((i for i, w in enumerate(words_list)
+                               if w.strip(".,!?;:…«»").lower() == "ли"), None)
+                    idx = li - 1 if (li is not None and li > 0) \
+                        else len(words_list) - 1
+                    target = words_list[idx]
+                    if target.strip(".,!?;:…«»"):
+                        words_list[idx] = \
+                            f'<prosody pitch="x-high">{target}</prosody>'
                         inner = " ".join(words_list)
             attrs = ""
             if seg.rate:

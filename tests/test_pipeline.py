@@ -244,3 +244,20 @@ def test_caps_emphasis():
     utts2, _ = pipe._analyze_wrap("СССР и РФ распались.")
     assert all(sg.emphasize_word is None
                for u in utts2 for sg in u.segments)
+
+
+def test_li_question_rise_ssml():
+    """«Подтверждаете ли вы…» — подъём тона на слове перед «ли»."""
+    from lektor.synthesis.silero_backend import SileroBackend
+    from lektor.synthesis.backends import Segment, Utterance
+    b = SileroBackend.__new__(SileroBackend)  # модель не нужна
+    utt = Utterance(segments=[Segment(
+        text="Подтвержд+аете ли вы получ+ение докум+ентов?",
+        pause_after_ms=0, question_rise=True)])
+    ssml = b._build_ssml(utt, [utt.segments[0].text])
+    assert 'pitch="x-high">Подтвержд+аете' in ssml
+    # обычный полярный вопрос — подъём на последнем слове
+    utt2 = Utterance(segments=[Segment(
+        text="Вы согл+асны с +иском?", pause_after_ms=0, question_rise=True)])
+    ssml2 = b._build_ssml(utt2, [utt2.segments[0].text])
+    assert 'pitch="x-high">+иском?' in ssml2
