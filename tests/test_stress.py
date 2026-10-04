@@ -104,3 +104,16 @@ def test_participle_and_homograph_stress():
     assert "кварт+ал" in out2      # район застройки
     out3 = st.stress_sentence("Орган власти издал акт, музыкальный орган звучал.")
     assert "+Орган" in out3 and "орг+ан" in out3
+
+
+def test_shared_accentor_model():
+    """Модель ударений грузится один раз на все экземпляры."""
+    from lektor.lingua.stress import StressAssigner
+    from lektor.report import Report
+    a1 = StressAssigner(Report())
+    a2 = StressAssigner(Report())
+    acc1 = a1._get_accentor()
+    acc2 = a2._get_accentor()
+    # либо обе None (нет модели), либо один и тот же объект
+    assert acc1 is acc2
+    assert StressAssigner._shared_acc_tried

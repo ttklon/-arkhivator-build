@@ -442,3 +442,43 @@ def test_technical_units():
     assert "кубических метров" in n.normalize_sentence("Объём 25 м³.")
     # «кв. м» не сломался
     assert "квадратных метров" in n.normalize_sentence("Квартира 45 кв. м.")
+
+
+def test_time_hours_minutes_form():
+    """«в 12 ч. 30 мин.» — время, а не «часть тридцатая»."""
+    n = make()
+    out = n.normalize_sentence("Заседание в 12 ч. 30 мин. начнётся.")
+    assert "двенадцать часов тридцать минут" in out
+    assert "часть" not in out
+    out2 = n.normalize_sentence("Собрание с 10 ч. до 14 ч. идёт.")
+    assert "с десяти часов до четырнадцати часов" in out2
+    # «ст. 5 ч. 2» — это часть статьи, а не часы
+    out3 = n.normalize_sentence("См. ст. 5 ч. 2 закона.")
+    assert "часть вторая" in out3      # «час» внутри «часть» — не часы
+
+
+def test_according_to_dative():
+    """«Согласно ст. 5» — дательный падеж: «согласно статье»."""
+    n = make()
+    out = n.normalize_sentence("Согласно ст. 5 закона требования законны.")
+    assert "статье" in out
+
+
+def test_geo_abbreviations():
+    """пос./пер./лит. разворачиваются; обл. согласуется с прилагательным."""
+    n = make()
+    out = n.normalize_sentence("Адрес: пос. Иванова, пер. Слесарный, 5.")
+    assert "посёлок Иванова" in out and "переулок Слесарный" in out
+    out2 = n.normalize_sentence("Офис в Московской обл., г. Одинцово.")
+    assert "Московской области" in out2
+    out3 = n.normalize_sentence("Заявление из Тверской обл. рассмотрено.")
+    assert "Тверской области" in out3
+    out4 = n.normalize_sentence("Корпус лит. А построен.")
+    assert "литера" in out4
+
+
+def test_and_or_slash():
+    """«и/или» читается слитно «и или», без паузы."""
+    n = make()
+    out = n.normalize_sentence("Продавец и/или покупатель подписывают.")
+    assert "и или" in out

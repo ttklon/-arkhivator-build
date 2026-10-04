@@ -222,23 +222,33 @@ class StressAssigner:
             pass
 
     # -- silero-stress: нейросеть ударений от Silero --------------------------
+    # модель грузится ~3,5 с: держим одну на все экземпляры
+    # (проба голоса + разметка + озвучка = один запуск, а не три)
+    _shared_acc = None
+    _shared_acc_tried = False
+    _shared_acc_lock = threading.Lock()
+
     def _get_accentor(self):
         """silero-stress: 4 млн слов, модели внутри pip-пакета, офлайн."""
-        if self._accentor_tried:
-            return self._accentor
-        self._accentor_tried = True
-        try:
-            from silero_stress import load_accentor
-            acc = load_accentor("ru")
-            # пробный вызов — убеждаемся, что модель реально работает
-            probe = acc("проверка")
-            if probe and "+" in probe:
-                self._accentor = acc
-                return acc
-            self.report.note("silero-stress ответил без разметки — проверяю ruaccent.")
-        except Exception as e:
-            self.report.note(f"silero-stress недоступен ({type(e).__name__}).")
-        return None
+        cls = StressAssigner
+        if cls._shared_acc_tried:
+            return cls._shared_acc
+        with cls._shared_acc_lock:
+            if cls._shared_acc_tried:
+                return cls._shared_acc
+            cls._shared_acc_tried = True
+            try:
+                from silero_stress import load_accentor
+                acc = load_accentor("ru")
+                # пробный вызов — убеждаемся, что модель реально работает
+                probe = acc("проверка")
+                if probe and "+" in probe:
+                    cls._shared_acc = acc
+                    return acc
+                self.report.note("silero-stress ответил без разметки — проверяю ruaccent.")
+            except Exception as e:
+                self.report.note(f"silero-stress недоступен ({type(e).__name__}).")
+        return cls._shared_acc
 
     # -- ruaccent: запасная нейросеть -----------------------------------------
     def _get_ruaccent(self):
