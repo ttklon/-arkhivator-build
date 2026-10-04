@@ -35,7 +35,7 @@ CONTOURS = {
     "IK7_negation":         ("отрицание-противопоставление", None, None, 1.0),
     "parenthesis":          ("вводность", None, None, 0.9),
     "address":              ("обращение отдельной синтагмой", None, None, 1.1),
-    "enum_continue":        ("перечисление, продолжение", None, None, 0.9),
+    "enum_continue":        ("перечисление, продолжение", None, "high", 0.9),
     "enum_final":           ("перечисление, конец", None, None, 1.0),
     "quote_open":           ("начало цитаты", None, None, 0.9),
     "quote_close":          ("конец цитаты", None, None, 1.0),

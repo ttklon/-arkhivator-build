@@ -186,6 +186,11 @@ class Segmenter:
             return Boundary.MEDIUM, "перед подчинительным союзом или вводным словом"
         if self._is_intro_before(words, comma_id):
             return Boundary.MEDIUM, "после вводного слова или оборота — нормативная пауза"
+        # синтаксическое дерево — самый надёжный признак однородности:
+        # сосед по запятой связан rel=conj (падежные теги у неоднозначных
+        # форм вроде «документы/справки/выписки» часто размечены случайно)
+        if nxt.rel == "conj" or prev.rel == "conj":
+            return Boundary.MEDIUM, "однородные члены предложения"
         if self._homogeneous(prev, nxt):
             return Boundary.MEDIUM, "однородные члены предложения"
         return Boundary.WEAK, ""
@@ -237,7 +242,11 @@ class Segmenter:
     def _homogeneous(a: W, b: W) -> bool:
         if a.pos in ("NOUN", "ADJ", "NUM", "VERB", "ADV") and a.pos == b.pos:
             if a.pos in ("NOUN", "ADJ", "NUM"):
-                return a.case == b.case or not a.case or not b.case
+                # у неодушевлённых винительный совпадает с именительным:
+                # «взыскать неустойку, проценты» — однородные, хоть падежи
+                # размечены accs и nomn
+                return (a.case == b.case or not a.case or not b.case
+                        or {a.case, b.case} <= {"nomn", "accs"})
             return True
         return False
 
@@ -292,8 +301,9 @@ class Segmenter:
     def _mark_enumerations(self, syntagms: List[Syntagm]) -> List[Syntagm]:
         """Перечисления (тр. 14): ровные паузы и нисходяще-ровная интонация
         на всех элементах, кроме последнего (без интонации завершения)."""
-        if len(syntagms) < 3:
+        if len(syntagms) < 2:
             return syntagms
+        HOMO = "однородные члены предложения"
         run_start = None
         for i, s in enumerate(syntagms):
             short = len(s.words) <= 18
@@ -302,11 +312,17 @@ class Segmenter:
                 if run_start is None:
                     run_start = i
             else:
-                if run_start is not None and i - run_start >= 2:
+                if run_start is not None and (
+                        i - run_start >= 2
+                        or (i - run_start >= 1
+                            and syntagms[run_start].reason == HOMO)):
                     for j in range(run_start, i):
                         syntagms[j].contour = "enum_continue"
                 run_start = None
-        if run_start is not None and len(syntagms) - run_start >= 2:
+        if run_start is not None and (
+                len(syntagms) - run_start >= 2
+                or (len(syntagms) - run_start >= 1
+                    and syntagms[run_start].reason == HOMO)):
             for j in range(run_start, len(syntagms)):
                 syntagms[j].contour = "enum_continue"
         return syntagms

@@ -268,14 +268,24 @@ class TextNormalizer:
             # («по ч. 2 ст. 159») предлог относится только к первой
             before = ("".join(out) + text[pos:m.start()]).lower().rstrip()
             case = "nomn"
-            for prep, pc in PREP_CASES.items():
-                if before.endswith(" " + prep) or before == prep:
-                    own = word_case(word)
-                    if own and own != "nomn":
-                        case = own
-                    else:
-                        case = pc
+            # многословные предлоги: «в силу ст. 61» -> «в силу статьи…»
+            for phrase, pc in (("в силу", "gent"), ("в порядке", "gent"),
+                               ("в рамках", "gent"), ("в целях", "gent"),
+                               ("в случае", "gent"), ("в отношении", "gent"),
+                               ("в течение", "gent"), ("по истечении", "gent"),
+                               ("по окончании", "gent")):
+                if before.endswith(phrase):
+                    case = pc
                     break
+            if case == "nomn":
+                for prep, pc in PREP_CASES.items():
+                    if before.endswith(" " + prep) or before == prep:
+                        own = word_case(word)
+                        if own and own != "nomn":
+                            case = own
+                        else:
+                            case = pc
+                        break
             if case != "nomn":
                 from .morphology import inflect_word
                 inflected = inflect_word(prefix, {case})
@@ -1133,6 +1143,14 @@ class TextNormalizer:
 
     # ==================================================================
     # 8. Остальные числа — с грамматическим согласованием
+    # существительные, которые с «в/во/по/с/со» ведут себя как предлоги
+    # родительного падежа
+    _GENT_CTX = {"течение", "течении", "порядке", "рамках", "целях",
+                 "случае", "случаи", "отношении", "соответствии",
+                 "соответствие", "истечении", "окончании",
+                 "продолжении", "продолжение", "результате", "пользу",
+                 "качестве", "лицо", "лица"}
+
     def _numbers(self, text: str) -> str:
         rx = re.compile(r"(\d{1,3}(?:[\s\u00a0]\d{3})+|\d+)(?:[.,](\d+))?")
 
@@ -1163,6 +1181,11 @@ class TextNormalizer:
             prev_word = before.split()[-1].lower() if before.split() else ""
             # «не более 3 лет» — родительный падеж после сравнительной
             if prev_word in ("более", "менее", "свыше"):
+                case = "gent"
+            # «в течение 10 дней», «по истечении 30 суток», «в рамках
+            # 3 программ» — отглагольные предлоги требуют родительного
+            elif (lambda bw: len(bw) >= 2 and bw[-2] in ("в", "во", "по", "с", "со")
+                  and prev_word in self._GENT_CTX)(before.lower().split()):
                 case = "gent"
             p = analyze(prev_word)
             if p is not None and p.tag and p.tag.POS == "PREP":

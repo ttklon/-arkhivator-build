@@ -53,3 +53,25 @@ def test_pause_ranges():
 def test_no_punct_one_syntagm():
     rep, words, syntagms = analyze_and_segment("Короткое предложение без знаков внутри")
     assert len(syntagms) == 1
+
+
+def test_enumeration_rhythm():
+    """Однородные члены получают подъём тона, последний — обычный."""
+    from lektor.config import load_settings
+    from lektor.pipeline import Pipeline
+    pipe = Pipeline(load_settings())
+    utts, _ = pipe._analyze_wrap(
+        "Документы, справки, выписки и квитанции приобщены к делу.")
+    segs = [sg for u in utts for sg in u.segments]
+    assert len(segs) == 3
+    assert segs[0].pitch == "high" and segs[1].pitch == "high"
+    assert segs[2].pitch is None
+    # двучленное перечисление тоже поднимается
+    utts2, _ = pipe._analyze_wrap(
+        "Истец, ответчик и третьи лица явились в заседание.")
+    segs2 = [sg for u in utts2 for sg in u.segments]
+    assert segs2[0].pitch == "high" and segs2[-1].pitch is None
+    # придаточное — НЕ перечисление, без искусственного подъёма
+    utts3, _ = pipe._analyze_wrap("Он пришёл, чтобы забрать документы.")
+    segs3 = [sg for u in utts3 for sg in u.segments]
+    assert all(sg.pitch is None for sg in segs3)

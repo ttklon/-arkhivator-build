@@ -529,3 +529,25 @@ def test_plus_after_number():
     n = make()
     out = n.normalize_sentence("Материал 18+ помечен.")
     assert "восемнадцать плюс" in out
+
+
+def test_gent_context_constructions():
+    """«в течение 10 дней», «в силу ст. 61» — родительный падеж."""
+    n = make()
+    out = n.normalize_sentence("В течение 10 дней ответчик возразил.")
+    assert "десяти дней" in out
+    out2 = n.normalize_sentence("По истечении 30 суток срок истёк.")
+    assert "тридцати суток" in out2
+    out3 = n.normalize_sentence("В рамках 3 программ финансирование выделено.")
+    assert "трёх программ" in out3
+    out4 = n.normalize_sentence("В случае 2 отказов спор передаётся в суд.")
+    assert "двух отказов" in out4
+
+
+def test_legal_phrase_article_case():
+    """«в силу ст. 61» -> «в силу статьи…» (родительный)."""
+    n = make()
+    out = n.normalize_sentence("В силу ст. 61 ГПК РФ обстоятельства установлены.")
+    assert "силу статьи" in out
+    out2 = n.normalize_sentence("Иск подан в порядке ст. 131 ГПК РФ.")
+    assert "в порядке статьи" in out2
