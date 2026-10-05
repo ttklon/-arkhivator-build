@@ -41,6 +41,7 @@ class Stage(str, Enum):
 @dataclass
 class JobResult:
     audio_path: str = ""
+    audio_paths: list = None               # все части, если книга разбита по главам
     duration_sec: float = 0.0
     report: Optional[Report] = None
     markup: str = ""
@@ -97,6 +98,24 @@ class Pipeline:
     # ==================================================================
     # Полный прогон: текст -> аудиофайл
     # ==================================================================
+    def _split_chapters(self, utterances):
+        """Группирует реплики по главам: глава начинается с заголовка —
+        короткой строки без точки в конце (контур IK1_heading:
+        rate=slow + pitch=low на единственном сегменте)."""
+        groups, current = [], []
+        for utt in utterances:
+            seg = utt.segments[0] if utt.segments else None
+            is_heading = (seg is not None and len(utt.segments) == 1
+                          and seg.rate == "slow" and seg.pitch == "low")
+            if is_heading and current:
+                groups.append(current)
+                current = [utt]
+            else:
+                current.append(utt)
+        if current:
+            groups.append(current)
+        return groups
+
     def run(self, text: str, title: str, out_dir: str = None,
             out_path: str = None) -> JobResult:
         t0 = time.time()
@@ -168,6 +187,62 @@ class Pipeline:
         # промежуточного WAV); если lameenc недоступен, рендер сам
         # переключится на WAV и здесь сконвертирует
         out_file = base + (".mp3" if self.settings.fmt == "mp3" else ".wav")
+
+        # разбиение по главам (заголовки текста -> отдельные файлы)
+        chapter_groups = None
+        if getattr(self.settings, "chapters", False) and not out_path:
+            groups = self._split_chapters(utterances)
+            if 1 < len(groups) <= 200:
+                chapter_groups = groups
+                self.report.note(
+                    f"Аудио разбито на {len(groups)} частей по заголовкам.")
+
+        if chapter_groups:
+            ext = ".mp3" if self.settings.fmt == "mp3" else ".wav"
+            total_utts = sum(len(g) for g in chapter_groups)
+            done_before, duration, out_files = 0, 0.0, []
+            meta = dict(renderer.meta)
+            for ci, group in enumerate(chapter_groups, 1):
+                part = f"{base} — часть {ci:02d}"
+                chapter_file = part + ext
+                meta_part = dict(meta,
+                                 title=f"{title} — часть {ci:02d}")
+                r = Renderer(backend, voice,
+                             speed=self.settings.speed,
+                             inter_pause_scale=1.0,
+                             progress=(lambda d, t, m, _off=done_before,
+                                       _tot=total_utts:
+                                       synth_progress(_off + d, _tot, m)),
+                             cancel_event=self.cancel_event,
+                             cache_dir=CACHE_DIR if self.cache else None,
+                             meta=meta_part)
+                duration += r.render(group, chapter_file)
+                done_before += len(group)
+                out_files.append(chapter_file)
+                if self._cancelled():
+                    break
+            if self._cancelled():
+                for f in out_files:
+                    for junk in (f, os.path.splitext(f)[0] + ".wav"):
+                        try:
+                            os.unlink(junk)
+                        except Exception:
+                            pass
+                return result
+            out_file = out_files[0]
+            result.audio_path = out_file
+            result.audio_paths = out_files
+            result.duration_sec = duration
+            result.markup = markup
+            self.report.stats["глав"] = len(out_files)
+            self.report.stats["длительность_аудио_сек"] = round(duration, 1)
+            self.report.stats["время_сборки_сек"] = round(time.time() - t0, 1)
+            self.report.finish(duration, time.time() - t0)
+            self.report.save(os.path.splitext(out_files[0])[0])
+            self._stage(Stage.FINAL, 1.0,
+                        f"готово: {len(out_files)} частей")
+            return result
+
         duration = renderer.render(utterances, out_file)
         if self._cancelled():
             for junk in (out_file, os.path.splitext(out_file)[0] + ".wav"):

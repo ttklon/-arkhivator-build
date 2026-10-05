@@ -138,6 +138,11 @@ class App(ctk.CTk):
         self.sw_abbr = ctk.CTkSwitch(right, text="Расшифровывать аббревиатуры (первый раз)")
         self.sw_abbr.pack(anchor="w", pady=1)
         self.sw_abbr.select() if self.settings.expand_abbrevs else self.sw_abbr.deselect()
+        self.sw_chapters = ctk.CTkSwitch(
+            right, text="Разбивать по главам (по заголовкам текста)")
+        self.sw_chapters.pack(anchor="w", pady=1)
+        self.sw_chapters.select() if getattr(self.settings, "chapters", False) \
+            else self.sw_chapters.deselect()
 
         ctk.CTkLabel(right, text="Сноски").pack(anchor="w", pady=(8, 0))
         self.om_foot = ctk.CTkOptionMenu(right, values=["пропускать", "читать в конце (тише)"], width=200)
@@ -282,6 +287,7 @@ class App(ctk.CTk):
         s.inter_pause_scale = round(float(self.sl_inter.get()), 2)
         s.fix_commas = bool(self.sw_fix.get())
         s.expand_abbrevs = bool(self.sw_abbr.get())
+        s.chapters = bool(self.sw_chapters.get())
         s.footnotes = "skip" if self.om_foot.get().startswith("пропуск") else "end"
         s.fmt = "mp3" if self.om_fmt.get() == "MP3" else "wav"
         save_settings(s)
@@ -651,6 +657,10 @@ class App(ctk.CTk):
                     mins = fmt_sec(res.duration_sec)
                     self.lbl_status.configure(
                         text=f"Готово! {mins} аудио · {res.report.summary_line()}")
+                    if getattr(res, "audio_paths", None):
+                        self._log(f"Глав: {len(res.audio_paths)}")
+                        for i, f in enumerate(res.audio_paths, 1):
+                            self._log(f"  часть {i}: {f}")
                     self._log(f"Файл: {res.audio_path}")
                     self._log(f"Движок: {res.engine}; голос: {res.voice}")
                     txt_path = os.path.splitext(res.audio_path)[0] + ".отчёт.txt"

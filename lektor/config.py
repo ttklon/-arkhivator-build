@@ -115,6 +115,7 @@ class Settings:
     fix_commas: bool = True                 # исправлять запятые по синтаксису (тр. 8–10)
     expand_abbrevs: bool = True             # расшифровка аббревиатур при первом упоминании (тр. 23)
     footnotes: str = "skip"                 # skip | end — что делать со сносками (тр. 26)
+    chapters: bool = False                  # разбивать аудио по заголовкам-главам
     read_numbers: bool = True               # нормализация чисел, дат, статей (тр. 24–25)
     # Выдача
     fmt: str = "mp3"                        # mp3 | wav

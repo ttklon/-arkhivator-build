@@ -75,3 +75,22 @@ def test_enumeration_rhythm():
     utts3, _ = pipe._analyze_wrap("Он пришёл, чтобы забрать документы.")
     segs3 = [sg for u in utts3 for sg in u.segments]
     assert all(sg.pitch is None for sg in segs3)
+
+
+def test_headings_split_from_paragraphs():
+    """Заголовок (строка без знака + пустая строка) — отдельное предложение."""
+    from lektor.lingua.tokenizer import split_sentences
+    text = ("Введение в право\n\nПраво — это система норм. "
+            "Она регулирует общество.")
+    sents = split_sentences(text)
+    assert len(sents) == 3
+    assert sents[0].text == "Введение в право"
+    # жёстко свёрстанный PDF (одиночные \n) не рассыпается
+    pdf = ("Суд установил,\nчто долг не возвращён,\nа проценты не уплачены.")
+    assert len(split_sentences(pdf)) == 1
+    # без пустой строки заголовок не отрезается
+    flow = "Глава про договоры\nТекст идёт сразу."
+    assert len(split_sentences(flow)) == 1
+    # диалог по строкам — реплики отдельные
+    dialog = "— Ты пойдёшь?\n\n— Обязательно."
+    assert len(split_sentences(dialog)) == 2

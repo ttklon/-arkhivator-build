@@ -43,6 +43,28 @@ class Token:
         return self.text.replace(",", ".").replace(" ", "").replace("\u00a0", ".").replace(".", "", 1).isdigit() and any(c.isdigit() for c in self.text)
 
 
+def _split_headings(s: Sentence) -> List[Sentence]:
+    """Строка без завершающего знака + пустая строка — заголовок.
+
+    razdel не рвёт «Введение в право\n\nПраво — …» на два предложения
+    (нет точки) — заголовок склеивается с абзацем и теряет свою
+    интонацию. Режем по \n\n+, только если «голова» не кончается
+    знаком конца/продолжения (одиночные \n не трогаем: жёстко
+    свёрстанные PDF-тексты не должны рассыпаться на обрывки).
+    """
+    if "\n\n" not in s.text:
+        return [s]
+    out, pos = [], 0
+    for m in re.finditer(r"\n\n+", s.text):
+        head = s.text[pos:m.start()]
+        if head.strip() and not re.search(r"[.!?…:;,]\s*$", head):
+            out.append(Sentence(head.rstrip(), s.start + pos,
+                                s.start + pos + len(head.rstrip())))
+            pos = m.end()
+    out.append(Sentence(s.text[pos:], s.start + pos, s.end))
+    return [x for x in out if x.text.strip()]
+
+
 def split_sentences(text: str) -> List[Sentence]:
     """Предложения; разрывы после известных сокращений склеиваем обратно.
 
@@ -65,7 +87,11 @@ def split_sentences(text: str) -> List[Sentence]:
                 out[-1] = Sentence(prev.text + sent.text, prev.start, sent.end)
                 continue
         out.append(sent)
-    return out
+    # заголовки (строка без знака в конце + пустая строка) — отдельно
+    result: List[Sentence] = []
+    for s in out:
+        result.extend(_split_headings(s))
+    return result
 
 
 def split_tokens(text: str) -> List[Token]:

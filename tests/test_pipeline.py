@@ -261,3 +261,38 @@ def test_li_question_rise_ssml():
         text="Вы согл+асны с +иском?", pause_after_ms=0, question_rise=True)])
     ssml2 = b._build_ssml(utt2, [utt2.segments[0].text])
     assert 'pitch="x-high">+иском?' in ssml2
+
+
+def test_chapters_split(tmp_path, monkeypatch):
+    """Разбивка по главам: заголовки текста -> отдельные аудиофайлы."""
+    import lektor.pipeline as pl
+    settings = load_settings()
+    settings.chapters = True
+    monkeypatch.setattr(pl, "build_backend",
+                        lambda s, log=None: StubBackend())
+    pipe = Pipeline(settings, log=lambda m: None)
+    text = ("Введение в право\n\nПраво — это система норм. "
+            "Она регулирует общество.\n\n"
+            "Источники права\n\n"
+            "Закон и обычай спорят. Судья решает.\n\n"
+            "Заключение\n\n"
+            "Итоги подведены. Задачи решены.")
+    res = pipe.run(text, "Лекции по праву")
+    assert res.audio_paths and len(res.audio_paths) == 3, res.audio_paths
+    for f in res.audio_paths:
+        assert os.path.exists(f) and os.path.getsize(f) > 1000
+    assert "часть 01" in res.audio_paths[0]
+    assert "часть 03" in res.audio_paths[2]
+
+
+def test_chapters_off_single_file(tmp_path, monkeypatch):
+    """Без включённой опции — один файл, как раньше."""
+    import lektor.pipeline as pl
+    settings = load_settings()
+    settings.chapters = False
+    monkeypatch.setattr(pl, "build_backend",
+                        lambda s, log=None: StubBackend())
+    pipe = Pipeline(settings, log=lambda m: None)
+    text = "Глава один\n\nТекст главы. Ещё текст."
+    res = pipe.run(text, "Книга")
+    assert res.audio_path and not res.audio_paths

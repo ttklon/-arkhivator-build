@@ -45,6 +45,8 @@ def main(argv=None) -> int:
                    help="не использовать дисковый кэш синтеза")
     p.add_argument("--doctor", action="store_true",
                    help="самодиагностика: зависимости, словари, модель, проба синтеза")
+    p.add_argument("--chapters", action="store_true",
+                   help="разбить аудио на части по заголовкам текста")
 
     a = p.parse_args(argv)
     settings = load_settings()
@@ -129,6 +131,9 @@ def main(argv=None) -> int:
         print("\n===== ОТЧЁТ =====")
         print(res.report.render_text())
         return 0
+
+    if a.chapters:
+        settings.chapters = True
 
     # -o: файл (.mp3/.wav) или папка
     out_dir = out_path = None
@@ -289,7 +294,10 @@ def batch(a, settings) -> int:
             res = pipe.run(read_any(path), os.path.splitext(name)[0])
             if res.audio_path:
                 ok += 1
-                print(f"  готово: {os.path.basename(res.audio_path)}")
+                if getattr(res, "audio_paths", None):
+                    print(f"  готово: {len(res.audio_paths)} частей")
+                else:
+                    print(f"  готово: {os.path.basename(res.audio_path)}")
             else:
                 print("  аудио не создано")
         except Exception as e:
