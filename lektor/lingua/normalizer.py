@@ -732,6 +732,18 @@ class TextNormalizer:
                     half = "пол-" if base[:1] in ("л", "а", "е", "ё", "и",
                                                   "о", "у", "ы", "э", "ю", "я") else "пол"
                     words = [half + base]
+                # «0,25 км» -> «четверть километра», «0,75 м» -> «три
+                # четверти метра» (падеж — по предлогу перед числом)
+                elif ip == "0" and fr.rstrip("0") == "25":
+                    before = text[:m.start()].rstrip()
+                    pw = before.split()[-1].lower() if before.split() else ""
+                    case = PREP_CASES.get(pw, "nomn")
+                    words = self._QUARTER.get(case, self._QUARTER["nomn"]) + [forms[1]]
+                elif ip == "0" and fr.rstrip("0") == "75":
+                    before = text[:m.start()].rstrip()
+                    pw = before.split()[-1].lower() if before.split() else ""
+                    case = PREP_CASES.get(pw, "nomn")
+                    words = self._THREE_Q.get(case, self._THREE_Q["nomn"]) + [forms[1]]
                 else:
                     words = numerals.decimal_words(int(ip), fr) + [forms[1]]
             else:
@@ -1167,6 +1179,10 @@ class TextNormalizer:
                     # неизменяемая, слово «процентов» не добавляем
                     if ip == "0" and fr == "5":
                         words = ["полпроцента"]
+                    elif ip == "0" and fr == "25":
+                        words = ["четверть", "процента"]
+                    elif ip == "0" and fr == "75":
+                        words = ["три", "четверти", "процента"]
                     else:
                         words = numerals.decimal_words(int(ip), fr)
                         if words[-2:] == ["с", "половиной"] or words[0] == "полтора":
@@ -1205,18 +1221,28 @@ class TextNormalizer:
         return re.sub(r"\s+", " ", text).strip()
 
     # ==================================================================
-    # 7а. Половинные единицы: «0,5 часа» -> «полчаса», «0,5 суток» ->
-    # «полсуток», «0,5 лет» -> «полгода». Живой язык, а не «ноль целых
-    # пять десятых часа».
+    # 7а. Половинные и четвертные единицы: «0,5 часа» -> «полчаса»,
+    # «0,5 суток» -> «полсуток», «0,5 лет» -> «полгода»; «0,25 часа» ->
+    # «четверть часа», «0,75 литра» -> «три четверти литра». Живой язык,
+    # а не «ноль целых пять десятых часа».
     _HALF_UNITS = {"час", "сутки", "год", "день", "неделя", "месяц",
                    "метр", "километр", "килограмм", "грамм", "тонна",
                    "литр", "страница", "процент"}
 
+    # формы «четверть»/«три четверти» по падежам (род. мн. у pymorphy
+    # ненадёжен: «около трёх четверти» вместо «трёх четвертей»)
+    _QUARTER = {"nomn": ["четверть"], "accs": ["четверть"], "gent": ["четверти"],
+                "datv": ["четверти"], "ablt": ["четвертью"], "loct": ["четверти"]}
+    _THREE_Q = {"nomn": ["три", "четверти"], "accs": ["три", "четверти"],
+                "gent": ["трёх", "четвертей"], "datv": ["трём", "четвертям"],
+                "ablt": ["тремя", "четвертями"], "loct": ["трёх", "четвертях"]}
+
     def _half_units(self, text: str) -> str:
-        rx = re.compile(r"(?<![\d.,])0[.,]50?(?!\d)\s+([А-ЯЁа-яё]+)")
+        rx = re.compile(r"(?<![\d.,])0[.,](50?0?|250?|750?)(?!\d)\s+([А-ЯЁа-яё]+)")
 
         def repl(m):
-            word = m.group(1)
+            word = m.group(2)
+            raw = m.group(1).rstrip("0") or "0"
             # слово с заглавной — возможно, имя собственное или аббревиатура
             if word[0].isupper():
                 return m.group(0)
@@ -1224,14 +1250,24 @@ class TextNormalizer:
             nf = str(getattr(p, "normal_form", "") or "").lower() if p is not None else ""
             if nf not in self._HALF_UNITS:
                 return m.group(0)
-            # «пол-» пишется через дефис перед гласной и «л»
-            # («пол-литра», «пол-урока»), иначе слитно («полчаса»)
-            gent = (inflect_word(nf, {"gent"}) or word).lower()
-            half = "пол-" if gent[:1] in ("л", "а", "е", "ё", "и", "о", "у",
-                                          "ы", "э", "ю", "я") else "пол"
-            reading = half + gent
-            self.report.number_normalized(m.group(0), reading)
-            return " " + reading + " "
+            if raw == "5":
+                # «пол-» пишется через дефис перед гласной и «л»
+                # («пол-литра», «пол-урока»), иначе слитно («полчаса»)
+                gent = (inflect_word(nf, {"gent"}) or word).lower()
+                half = "пол-" if gent[:1] in ("л", "а", "е", "ё", "и", "о", "у",
+                                              "ы", "э", "ю", "я") else "пол"
+                reading = half + gent
+                self.report.number_normalized(m.group(0), reading)
+                return " " + reading + " "
+            # «четверть часа», «три четверти литра» — раздельно;
+            # единица уже стоит в родительном падеже, оставляем её на месте
+            before = text[:m.start()].rstrip()
+            pw = before.split()[-1].lower() if before.split() else ""
+            case = PREP_CASES.get(pw, "nomn")
+            forms = self._THREE_Q if raw == "75" else self._QUARTER
+            reading = " ".join(forms.get(case, forms["nomn"]))
+            self.report.number_normalized(m.group(0), reading + " " + word.lower())
+            return " " + reading + " " + word + " "
 
         return rx.sub(repl, text)
 

@@ -664,3 +664,30 @@ def test_half_measure_units():
     assert "ноль целых" not in out
     out2 = n.normalize_sentence("0,5 км/ч и 0.5 В.")
     assert "полкилометра в час" in out2 and "полвольта" in out2
+
+
+def test_quarter_units():
+    """«0,25 часа» -> «четверть часа», «0,75 литра» -> «три четверти литра»."""
+    n = make()
+    out = n.normalize_sentence("Подожди 0,25 часа, это займёт 0,75 литра.")
+    assert "четверть часа" in out
+    assert "три четверти литра" in out
+    assert "ноль целых" not in out
+
+
+def test_quarter_units_inflected():
+    """Четверти склоняются по предлогу («около четверти», «с четвертью»)."""
+    n = make()
+    out = n.normalize_sentence("Около 0,25 суток и с 0,25 часа пути.").lower()
+    assert "около четверти суток" in out
+    assert "с четвертью часа" in out
+    out2 = n.normalize_sentence("Около 0,75 метра ткани.").lower()
+    assert "около трёх четвертей метра" in out2
+
+
+def test_quarter_percent():
+    """«0,25%» -> «четверть процента», «0,75%» -> «три четверти процента»."""
+    n = make()
+    out = n.normalize_sentence("Рост 0,25% и падение 0,75%.").lower()
+    assert "четверть процента" in out
+    assert "три четверти процента" in out
