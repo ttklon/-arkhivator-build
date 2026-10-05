@@ -94,3 +94,14 @@ def test_headings_split_from_paragraphs():
     # диалог по строкам — реплики отдельные
     dialog = "— Ты пойдёшь?\n\n— Обязательно."
     assert len(split_sentences(dialog)) == 2
+
+
+def test_initials_no_pause():
+    """Точки инициалов («Иванов И. И. проживает») не дают пауз внутри ФИО."""
+    from lektor.pipeline import Pipeline
+    from lektor.config import Settings
+    m = Pipeline(Settings()).dry_run("Иванов И. И. проживает в Курске.").markup
+    # внутри ФИО нет границ предложения (520 мс)
+    inside = m.split("\n")[0]
+    assert "И. И." in inside
+    assert inside.count("520") == 1     # только в самом конце

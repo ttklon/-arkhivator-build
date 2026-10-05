@@ -119,6 +119,12 @@ class TextNormalizer:
         "с": "листом",
     }
 
+    # «гр. Иванова» — гражданин; падеж от предлога («в отношении гр.» ->
+    # «в отношении гражданина»)
+    _CITIZEN_FORMS = {"nomn": "гражданин", "gent": "гражданина",
+                      "datv": "гражданину", "ablt": "гражданином",
+                      "loct": "гражданине", "accs": "гражданина"}
+
     # «ст.ст. 158-160» / «ст. ст.» — статьи (мн.ч.); «п.п. 1, 2» — пункты;
     # падеж — от предлога («согласно п.п.» -> «согласно пунктам»)
     _PL_FORMS = {
@@ -164,6 +170,21 @@ class TextNormalizer:
         text = re.sub(r"(?<![\w.])"
                       r"(?:(во|в|на|при|об|о|по|к|из|у|от|до|для|без|около|возле|с|согласно)\s+)?"
                       r"(ст|п)\.\s*\2\.(?![\w.])", pl_repl, text, flags=re.IGNORECASE)
+        # «гр. Иванов» -> «гражданин Иванов» (падеж от предлога; «в
+        # отношении гр.» — родительный)
+        def gr_repl(m):
+            prep = m.group(1)
+            if not prep:
+                before = text[:m.start()].rstrip().lower().split()
+                if before and before[-1] in ("отношении", "отношению", "лицу"):
+                    return " гражданина "
+                return " гражданин "
+            return (prep + " "
+                    + cls._CITIZEN_FORMS.get(PREP_CASES.get(prep.lower(), ""),
+                                             "гражданин") + " ")
+        text = re.sub(r"(?<![\w.])"
+                      r"(?:(во|в|на|при|об|о|по|к|из|у|от|до|для|без|около|возле|с|согласно)\s+)?"
+                      r"гр\.(?=\s*[А-ЯЁ])", gr_repl, text, flags=re.IGNORECASE)
         return text
 
     # ==================================================================
@@ -635,7 +656,7 @@ class TextNormalizer:
             return " " + reading + " "
 
         text = re.sub(r"\b([IVXLCDM]{1,8})\b\s+"
-                      r"(век\w*|часть\w*|част\w*|глав\w*|раздел\w*)",
+                      r"(век\w*|часть\w*|част\w*|глав\w*|раздел\w*|квартал\w*)",
                       repl, text)
 
         # обратный порядок: «часть II», «главе XVIII», «том III»
@@ -656,7 +677,7 @@ class TextNormalizer:
             self.report.number_normalized(m.group(0), reading)
             return " " + reading + " "
 
-        return re.sub(r"\b([Чч]аст\w*|[Гг]лав\w*|[Тт]ом\w*|[Рр]аздел\w*)\s+([IVXLCDM]{1,8})\b",
+        return re.sub(r"\b([Чч]аст\w*|[Гг]лав\w*|[Тт]ом\w*|[Рр]аздел\w*|[Кк]вартал\w*)\s+([IVXLCDM]{1,8})\b",
                       repl_back, text)
 
     # ==================================================================
@@ -866,6 +887,10 @@ class TextNormalizer:
                 words.append("в секунду в кубе")
             elif u.endswith("/с"):
                 words.append("в секунду")
+            elif u.endswith("/л"):
+                # «0,45 мг/л» -> «миллиграмма на литр» (алкотестеры,
+                # концентрации в растворах)
+                words.append("на литр")
             reading = " ".join(words)
             self.report.number_normalized(m.group(0), reading)
             return " " + reading + " "
@@ -873,7 +898,7 @@ class TextNormalizer:
         # многобуквенные единицы — без учёта регистра («кг», «Гб», «кВт»);
         # «В.» (вольт) не должен превращаться в «век» — это делает _shorts
         rx_multi = re.compile(
-            r"(\d+(?:[.,]\d+)?)\s*(км/час|км/ч|км/с|"
+            r"(\d+(?:[.,]\d+)?)\s*(мг/л|г/л|мл/л|км/час|км/ч|км/с|"
             r"м/с²|м/с2|м/с\^2|м/с³|м/с3|м/с\^3|м/с|"
             r"м\u00b2|м2|м\^2|кв\.?\s*м|"
             r"м\u00b3|м3|м\^3|куб\.?\s*м|"
@@ -1520,7 +1545,23 @@ class TextNormalizer:
                         break
                     if tok.text in {",", ".", ";"}:
                         break
-                words = numerals.decimal_words(ip, frac, gender)
+                # «ст. 12.26» с ТОЧКОЙ после ссылки на норму — это номер,
+                # а не дробь: в русском языке дробь пишется через запятую.
+                # Читаем «двенадцать двадцать шесть», как и говорят юристы;
+                # «0.5 часа», «7.5 вольт» (с единицами) остаются дробями
+                if "." in raw and "," not in raw:
+                    win = text[max(0, m.start() - 40):m.start()].lower()
+                    # от ссылки («статьи», «пункта») до числа — только
+                    # цифры, числительные словами, союзы и знаки
+                    if re.search(r"(?:стать[а-яё]*|част[а-яё]*|пункт[а-яё]*|"
+                                 r"подпункт[а-яё]*)\s*№?[\dа-яё\s,.и—–-]*$",
+                                 win):
+                        words = (numerals.cardinal_words(ip)
+                                 + numerals.cardinal_words(int(frac)))
+                    else:
+                        words = numerals.decimal_words(ip, frac, gender)
+                else:
+                    words = numerals.decimal_words(ip, frac, gender)
             else:
                 words = numerals.cardinal_words(ip)
             # дробные тоже склоняются: «от 2,5 км» -> «от двух с

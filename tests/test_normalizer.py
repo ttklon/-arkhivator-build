@@ -861,3 +861,56 @@ def test_stranica_ref():
     n = TextNormalizer(Report())
     out = n.normalize_sentence("См. стр. 12 решения.")
     assert "страница" in out and "двенадцать" in out
+
+
+def test_roman_quarter():
+    """«I квартал» — римские номера кварталов читаются порядковыми."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    assert n.normalize_sentence("В I квартале 2024 года рост.").startswith(
+        "В первом квартале")
+    assert "четвёртого квартала" in n.normalize_sentence("По итогам IV квартала.")
+
+
+def test_paragraph_signs():
+    """«§§» — параграфы (мн.ч.), не «параграф параграф»."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    out = n.normalize_sentence("Нарушены §§ 3, 4 договора.")
+    assert out.startswith("Нарушены параграфы")
+    assert "параграф параграф" not in out
+
+
+def test_mg_per_liter():
+    """«0,45 мг/л» — миллиграмма на литр, без слэша."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    out = n.normalize_sentence("Установлено 0,45 мг/л спирта.")
+    assert "миллиграмма на литр" in out and "/" not in out
+
+
+def test_grazhdanin():
+    """«гр. Иванова» — гражданин с падежом от предлога."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    assert "гражданина Иванова" in n.normalize_sentence(
+        "В отношении гр. Иванова рассмотрено.")
+    assert "гражданин Петров" in n.normalize_sentence("Гр. Петров явился.")
+    assert "гражданина Сидорова" in n.normalize_sentence(
+        "У гр. Сидорова изъято.")
+
+
+def test_dot_number_not_fraction():
+    """«ст. 12.26» — номер с точкой, не дробь (дробь в русском через запятую)."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    out = n.normalize_sentence("Нарушены ст. 12.8 и 12.26 КоАП РФ.")
+    assert "двенадцать двадцать шесть" in out
+    assert "сотых" not in out
+    # запятая — по-прежнему дробь
+    assert "с половиной" in n.normalize_sentence("Выплатить 12,5 процента.")

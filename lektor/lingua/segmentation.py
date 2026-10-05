@@ -137,7 +137,15 @@ class Segmenter:
             elif t in {"—", "–", "−"}:
                 decisions[w.id] = (Boundary.MEDIUM, "тире")
             elif t in {".", "!", "?", "…"}:
-                decisions[w.id] = (Boundary.STRONG, "конец предложения")
+                prev = self._near_word(words, w.id, -1)
+                # точка после одиночной заглавной буквы — инициал
+                # («Иванов И. И. проживает»): ФИО читается слитно,
+                # без паузы между инициалами
+                if t == "." and prev is not None and len(prev.text) == 1 \
+                        and prev.text[0].isupper():
+                    decisions[w.id] = (Boundary.WEAK, "инициал (И. И.)")
+                else:
+                    decisions[w.id] = (Boundary.STRONG, "конец предложения")
             elif t == ")":
                 prev = self._near_word(words, w.id, -1)
                 if prev is not None and (prev.text.isdigit() or len(prev.text) == 1):
