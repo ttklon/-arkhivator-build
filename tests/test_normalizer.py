@@ -779,3 +779,27 @@ def test_city_case_after_preposition():
     # год и грамм не должны превратиться в город
     assert "году" in n.normalize_sentence("В 2010 г. он родился.")
     assert "граммов" in n.normalize_sentence("Масса 100 г.")
+
+
+def test_street_case_after_preposition():
+    """«на ул. Ленина» -> «на улице Ленина» — падеж от предлога, не именительный."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    assert n.normalize_sentence("На ул. Ленина, д. 5 он жил.") == \
+        "На улице Ленина, дом 5 он жил.".replace("5", "пять")
+    assert n.normalize_sentence("По ул. Мира идут.") == "По улице Мира идут."
+    assert n.normalize_sentence("В г. Москве, на пр. Вернадского.") == \
+        "В городе Москве, на проспекте Вернадского."
+    # адрес-перечисление без предлогов — именительный, как и раньше
+    assert n.normalize_sentence("г. Москва, ул. Тверская, д. 7.") == \
+        "город Москва, улица Тверская, дом семь."
+
+
+def test_i_pr_short():
+    """«и пр.» читается «и прочие» (а не остаётся «пр.»)."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    assert n.normalize_sentence("Расторжение, убытки и пр. последствия.") == \
+        "Расторжение, убытки и прочие последствия."

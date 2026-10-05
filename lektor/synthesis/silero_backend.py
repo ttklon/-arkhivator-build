@@ -172,8 +172,34 @@ class SileroBackend(Backend):
         return text
 
     # ------------------------------------------------------------------
+    def _valid_voice(self, voice: str) -> str:
+        """Неверный голос не должен молча убивать синтез.
+
+        Например, сохранённый «xenia» (v4) при установленной v5_cis_base
+        (голоса ru_*): раньше все попытки падали внутри и реплика
+        пропускалась молча. Теперь — предупреждение и замена на
+        доступный голос той же модели.
+        """
+        try:
+            sp = list(self._model.speakers)
+        except Exception:
+            return voice
+        if voice in sp:
+            return voice
+        for v in ("xenia", "baya", "eugene", "aidar", "kseniya", "ru_alexandr",
+                  "ru_ekaterina", "ru_oksana"):
+            if v in sp:
+                self._log(f"[внимание] голос «{voice}» недоступен в модели "
+                          f"{self._model_id or self.preferred} — озвучиваем голосом «{v}»")
+                return v
+        first = sorted(sp)[0]
+        self._log(f"[внимание] голос «{voice}» недоступен — озвучиваем голосом «{first}»")
+        return first
+
+    # ------------------------------------------------------------------
     def synth(self, utterance: Utterance, voice: str) -> np.ndarray:
         self.warm_up(voice)
+        voice = self._valid_voice(voice)
         try:
             return self._synth_try(utterance, voice, use_ssml=True)
         except Exception:
