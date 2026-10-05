@@ -191,3 +191,12 @@ def test_to_izhest_unstressed():
     assert "+есть" not in out.lower()
     out2 = s.stress_sentence("то-есть")
     assert out2.lower() == "то-есть"
+
+
+def test_half_amount_stress():
+    """«пол-»-суммы: ударения падежных форм (silero ошибается на «полумиллиарде»)."""
+    s = make()
+    out = s.stress_sentence("Сделка на полумиллиарде и около полутысячи дел.")
+    assert "полумиллиард+е" in out
+    assert "полут+ысячи" in out
+    assert "полумилли+арде" not in out
