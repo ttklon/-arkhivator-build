@@ -181,3 +181,13 @@ def test_service_hyphen_left_alone():
     s = make()
     out = s.stress_sentence("Из-за дождя.")
     assert "из-за" in out.lower() and "+" not in out.lower().split("из-за")[0]
+
+
+def test_to_izhest_unstressed():
+    """«то есть» — связка «есть» безударна (и раздельно, и через дефис)."""
+    s = make()
+    out = s.stress_sentence("То есть, иными словами, это важно.")
+    assert "то есть" in out.lower().replace("+", "") or "т+о есть" in out.lower()
+    assert "+есть" not in out.lower()
+    out2 = s.stress_sentence("то-есть")
+    assert out2.lower() == "то-есть"
