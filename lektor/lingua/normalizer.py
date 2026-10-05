@@ -89,8 +89,37 @@ class TextNormalizer:
         self.expanded: set = set()   # аббревиатуры, уже расшифрованные (тр. 23)
 
     # ==================================================================
+    # Составные сокращения с точками внутри: «т. е.», «т. к.», «в т. ч.» …
+    # Разворачиваем в слова ДО всего: иначе точка после «т» становится
+    # «концом предложения» для сегментатора синтагм и фраза рвётся паузой
+    # («в т. ч.» читалось как «в т. … часть»). Не меняем только внутри
+    # SSML-тегов <...> (там свои атрибуты).
+    _COMPOUND_SHORTS = (
+        (re.compile(r"(?<![\w.])[Вв]\s+т\.\s*ч\.(?![\w.])"), "в том числе"),
+        (re.compile(r"(?<![\w.])т\.\s*е\.(?![\w.])", re.IGNORECASE), "то есть"),
+        (re.compile(r"(?<![\w.])т\.\s*к\.(?![\w.])", re.IGNORECASE), "так как"),
+        (re.compile(r"(?<![\w.])т\.\s*о\.(?![\w.])", re.IGNORECASE), "таким образом"),
+        (re.compile(r"(?<![\w.])т\.\s*д\.(?![\w.])", re.IGNORECASE), "так далее"),
+        (re.compile(r"(?<![\w.])т\.\s*п\.(?![\w.])", re.IGNORECASE), "тому подобное"),
+    )
+
+    @classmethod
+    def _expand_compound_shorts(cls, text: str) -> str:
+        if "." not in text or "<" in text:   # без точек/внутри SSML не трогаем
+            return text
+        parts = re.split(r"(<[^>]*>)", text)  # теги пропускаем
+        for i, part in enumerate(parts):
+            if part.startswith("<"):
+                continue
+            for rx, repl in cls._COMPOUND_SHORTS:
+                part = rx.sub(repl, part)
+            parts[i] = part
+        return "".join(parts)
+
+    # ==================================================================
     def normalize_sentence(self, text: str) -> str:
         text = self._paren_dedupe(text)     # 100 000 (сто тысяч) -> 100 000
+        text = self._expand_compound_shorts(text)   # т. е. -> «то есть» и пр.
         text = self._shorts(text)
         text = self._articles(text)          # ст. 159 ч. 2 п. «в»
         text = self._law_numbers(text)       # №149-ФЗ, дело № 2-123/2021
@@ -413,7 +442,26 @@ class TextNormalizer:
 
     # ==================================================================
     # 4. Даты (тр. 25)
+    # «г.» после предлога — падеж слова «город» задаёт предлог
+    # (PREP_CASES): «в г. Москве» -> «в городе Москве» (не «в город
+    # Москве!»), «из г. Курска» -> «из города Курска»,
+    # «с г. Обнинском» -> «с городом Обнинском»
+    _CITY_BY_CASE = {
+        "nomn": "город", "gent": "города", "datv": "городу",
+        "accs": "город", "ablt": "городом", "loct": "городе",
+    }
+
     def _dates(self, text: str) -> str:
+        def city_repl(m):
+            prep, name = m.group(1), m.group(2)
+            form = self._CITY_BY_CASE.get(PREP_CASES.get(prep.lower(), ""), "город")
+            return f"{prep} {form} {name}"
+        # только с заглавным именем города следом («в г. Москве»);
+        # «в 2006 г.» не совпадает — между предлогом и «г.» стоит число
+        text = re.sub(r"\b(во|в|на|при|об|о|по|к|из|у|от|до|для|без|около|возле|с)"
+                      r"\s+г\.\s*([А-ЯЁ][А-ЯЁа-яё-]+)", city_repl, text,
+                      flags=re.IGNORECASE)
+
         # адресные сокращения: «г. Москва» -> «город Москва», «ул. Ленина,
         # д. 5» -> «улица Ленина, дом пять» (но «2006 г.» — это год!)
         def addr_repl(m):

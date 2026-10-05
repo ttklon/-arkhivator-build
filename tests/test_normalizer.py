@@ -746,3 +746,36 @@ def test_new_abbreviations():
     assert "орган внутренних дел" in out2
     assert "нормативно-правовой акт" in out2
     assert "далее" in out2
+
+
+def test_compound_shorts():
+    """«т. е.», «т. к.», «в т. ч.» — слова, а не разорванные паузой обрывки."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    assert n.normalize_sentence("Кража, т. е. тайное хищение.") == \
+        "Кража, то есть тайное хищение."
+    assert n.normalize_sentence("Он оправдан, т. к. нет состава.") == \
+        "Он оправдан, так как нет состава."
+    assert n.normalize_sentence("В т. ч. и мы.").lower() == "в том числе и мы."
+    assert n.normalize_sentence("И т. д. и т. п.") == "И так далее и тому подобное"
+    assert n.normalize_sentence("Т. о., состав отсутствует.").lower() == \
+        "таким образом, состав отсутствует."
+
+
+def test_city_case_after_preposition():
+    """«в г. Москве» -> «в городе Москве»: падеж слова «город» — от предлога."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    assert n.normalize_sentence("Проживает в г. Москве.") == \
+        "Проживает в городе Москве."
+    assert n.normalize_sentence("Прибыл из г. Курска.") == \
+        "Прибыл из города Курска."
+    assert n.normalize_sentence("К г. Туле подъезжаем.") == "К городу Туле подъезжаем."
+    assert n.normalize_sentence("Рядом с г. Обнинском.") == "Рядом с городом Обнинском."
+    # без предлога — именительный, как и раньше
+    assert n.normalize_sentence("г. Москва — столица.") == "город Москва — столица."
+    # год и грамм не должны превратиться в город
+    assert "году" in n.normalize_sentence("В 2010 г. он родился.")
+    assert "граммов" in n.normalize_sentence("Масса 100 г.")

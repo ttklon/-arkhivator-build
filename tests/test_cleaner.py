@@ -112,3 +112,15 @@ def test_superscript_units_not_footnotes():
     assert c.clean("Поле 5 км² и 10 мм².") == "Поле 5 км² и 10 мм²."
     # настоящие сноски после слов — удаляются
     assert c.clean("Сноска¹ и ещё² тут.") == "Сноска и ещё тут."
+
+
+def test_single_line_not_colontitle():
+    """Однострочный ввод «ст. 158» — это текст, а не колонтитул «ст. 158 из 200»."""
+    from lektor.textproc.cleaner import Cleaner
+    from lektor.report import Report
+    c = Cleaner(Report())
+    assert c.clean("ст. 158") == "ст. 158"
+    assert c.clean("158") == "158"
+    # в многострочном тексте номера страниц по-прежнему выкидываются
+    multi = "Текст документа.\n12\n13\nЕщё текст."
+    assert c.clean(multi) == "Текст документа.\nЕщё текст."

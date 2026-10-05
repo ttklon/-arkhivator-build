@@ -88,13 +88,17 @@ class Cleaner:
 
     def _remove_noise(self, text: str) -> str:
         lines = text.splitlines()
+        # однострочный ввод (строка из GUI/CLI) — это не колонтитул:
+        # «ст. 158» или «158» не должны молча исчезать как «номер страницы»
+        single = len(lines) == 1
         cleaned: List[str] = []
         for line in lines:
             s = line.strip()
             # номера страниц и служебные строки
-            if re.fullmatch(r"\d{1,4}([—–-]\d{1,4})?", s):
+            if not single and re.fullmatch(r"\d{1,4}([—–-]\d{1,4})?", s):
                 continue
-            if re.fullmatch(r"(стр|ст|с)\.?\s*\d+( из \d+)?", s, re.IGNORECASE):
+            if not single and re.fullmatch(r"(стр|ст|с)\.?\s*\d+( из \d+)?", s,
+                                           re.IGNORECASE):
                 continue
             if re.fullmatch(r"[—–\-_=•·.\s]+", s):
                 continue
