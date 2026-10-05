@@ -628,3 +628,39 @@ def test_fraction_inflection():
     assert "от двух с половиной километров" in out.lower()
     out2 = n.normalize_sentence("Без 2,5 процентов запаса.")
     assert "без двух с половиной процентов" in out2.lower()
+
+
+def test_dot_fractions_with_units():
+    """«0.5 часа» (с точкой) — дробь, а не версия; единицы разворачиваются."""
+    n = make()
+    out = n.normalize_sentence("2.5 млн рублей и 1.5 тыс. единиц.")
+    assert "два с половиной миллиона рублей" in out
+    assert "полторы тысячи единиц" in out
+    out2 = n.normalize_sentence("3.5 м ткани и 7.5 вольт.")
+    assert "три с половиной метра" in out2
+    assert "семь с половиной вольт" in out2
+    out3 = n.normalize_sentence("0.5 часа ожидания.")
+    assert "полчаса" in out3
+    assert "ноль пять" not in out3
+
+
+def test_version_context():
+    """«Python 3.10» — версия, а не дата; без контекста — дата."""
+    n = make()
+    out = n.normalize_sentence("Python 2.7 и 3.10.")
+    assert "два семь" in out and "три десять" in out
+    assert "октября" not in out
+    out2 = n.normalize_sentence("Версия 2.10 вышла, сборка 3.5.1 готова.")
+    assert "два десять" in out2 and "три пять один" in out2
+    out3 = n.normalize_sentence("Дело от 2.10 подано.")
+    assert "второго октября" in out3
+
+
+def test_half_measure_units():
+    """«0,5 кг» -> «полкилограмма» — и для точечной дроби тоже."""
+    n = make()
+    out = n.normalize_sentence("0,5 кг и 0.5 л воды.")
+    assert "полкилограмма" in out and "пол-литра" in out
+    assert "ноль целых" not in out
+    out2 = n.normalize_sentence("0,5 км/ч и 0.5 В.")
+    assert "полкилометра в час" in out2 and "полвольта" in out2

@@ -241,8 +241,11 @@ class TextNormalizer:
                  r"(?=[)\]},;:!?…\s»]|$|\.(?!\d))")
 
     def _articles(self, text: str) -> str:
-        # после слова ссылки обязателен конец слова («ст.», «статья », но не «по»)
-        rx = re.compile(r"\b(" + self._REF_WORD + r")(?:\.|(?=\s))\s*(" + self._REF_ITEM + r")",
+        # после слова ссылки обязателен конец слова («ст.», «статья », но не «по»);
+        # перед ним не должно быть буквы или слэша: иначе «ч» вырезается
+        # из «км/ч» («5 км/ч и 2 м/с» -> «км/часть…»)
+        rx = re.compile(r"(?<![а-яёА-ЯЁa-zA-Z/])(" + self._REF_WORD + r")"
+                        r"(?:\.|(?=\s))\s*(" + self._REF_ITEM + r")",
                         re.IGNORECASE)
         out = []
         pos = 0
@@ -722,13 +725,29 @@ class TextNormalizer:
             forms, gender = self._MEASURES[key]
             if "." in raw:
                 ip, fr = raw.split(".", 1)
-                words = numerals.decimal_words(int(ip), fr) + [forms[1]]
+                # «0,5 кг» -> «полкилограмма», «0,5 л» -> «пол-литра»:
+                # так говорят, а не «ноль целых пять десятых килограмма»
+                if ip == "0" and fr.rstrip("0") == "5":
+                    base = forms[1].lower()
+                    half = "пол-" if base[:1] in ("л", "а", "е", "ё", "и",
+                                                  "о", "у", "ы", "э", "ю", "я") else "пол"
+                    words = [half + base]
+                else:
+                    words = numerals.decimal_words(int(ip), fr) + [forms[1]]
             else:
                 n = int(raw)
                 words = numerals.cardinal_words(n, gender) + [self._plural_unit(n, forms)]
-            # «60 км/ч» -> «шестьдесят километров в час»
-            if unit_raw.endswith("/ч") or unit_raw.endswith("/час"):
+            # «60 км/ч» -> «шестьдесят километров в час»; «9,8 м/с²» ->
+            # «…метров в секунду в квадрате»; «км/с», «м/с» — тоже
+            u = unit_raw.lower()
+            if u.endswith("/ч") or u.endswith("/час"):
                 words.append("в час")
+            elif u.endswith("/с²") or u.endswith("/с2") or u.endswith("/с^2"):
+                words.append("в секунду в квадрате")
+            elif u.endswith("/с³") or u.endswith("/с3") or u.endswith("/с^3"):
+                words.append("в секунду в кубе")
+            elif u.endswith("/с"):
+                words.append("в секунду")
             reading = " ".join(words)
             self.report.number_normalized(m.group(0), reading)
             return " " + reading + " "
@@ -736,7 +755,9 @@ class TextNormalizer:
         # многобуквенные единицы — без учёта регистра («кг», «Гб», «кВт»);
         # «В.» (вольт) не должен превращаться в «век» — это делает _shorts
         rx_multi = re.compile(
-            r"(\d+(?:[.,]\d+)?)\s*(км/час|км/ч|м\u00b2|м2|м\^2|кв\.?\s*м|"
+            r"(\d+(?:[.,]\d+)?)\s*(км/час|км/ч|км/с|"
+            r"м/с²|м/с2|м/с\^2|м/с³|м/с3|м/с\^3|м/с|"
+            r"м\u00b2|м2|м\^2|кв\.?\s*м|"
             r"м\u00b3|м3|м\^3|куб\.?\s*м|"
             r"кг|мг|км|см|мм|мл|гб|мб|кб|тб|гц|мгц|кгц|квт|вт)"
             r"(?![а-яёА-ЯЁa-zA-Z])", re.IGNORECASE)
@@ -997,9 +1018,13 @@ class TextNormalizer:
             has_year = m.group(3) is not None
             if not (1 <= d <= 31 and 1 <= mo <= 12):
                 return m.group(0)
-            # «версия 2.10», «сборка 3.5» — не дата
-            wbefore = text[max(0, m.start() - 14):m.start()].lower().rstrip()
-            if re.search(r"(?:верси|сборк|релиз|обновлени|build|v)[а-яё]*$", wbefore):
+            # «версия 2.10», «сборка 3.5» — не дата; латинское слово
+            # перед числом («Python 3.10», «iOS 12.1») — тоже признак
+            # версии, а не даты (в т.ч. через «и»: «Python 2.7 и 3.10»)
+            wbefore = text[max(0, m.start() - 26):m.start()].lower().rstrip()
+            if re.search(r"(?:верси|сборк|релиз|обновлени|build|v)[а-яё]*$"
+                         r"|[a-z][\w.]*$"
+                         r"|[a-z][\w.]*\s*\d[\d.]*\s*(?:и|или)\s*$", wbefore):
                 return m.group(0)
             if not has_year:
                 # без года похоже на дату только при двузначных частях
@@ -1067,16 +1092,38 @@ class TextNormalizer:
                       subsec_repl, text, flags=re.IGNORECASE)
 
         # оставшиеся цепочки «3.5.1», «192.168.1.1», «версия 2.10» —
-        # читаем поцифрово, а не как даты или десятичные
+        # читаем поцифрово, а не как даты или десятичные.
+        # Два исключения:
+        #  - «0.5» (ровно два сегмента, первый — ноль) — это дробь,
+        #    а не версия: пусть её читает _measures/_numbers;
+        #  - «2.5 кг», «1.5 млн», «3.5 м» — дробь с единицей: единицу
+        #    разворачивает _measures/_amounts, а не этот шаг
         def chain_repl(m):
+            chain = m.group(1)
+            # двухсегментная «X.Y», за которой родительный падеж («7.5
+            # вольт», «2.7 метра») — это дробь с единицей, а не версия:
+            # отдаём числу с согласованием, единица останется на месте
+            if chain.count(".") == 1:
+                after = text[m.end():].lstrip()
+                for tok in split_tokens(after)[:2]:
+                    if tok.is_word:
+                        if word_case(tok.text) == "gent":
+                            return m.group(0)
+                        break
+                    if tok.text in {",", ".", ";", "!"}:
+                        break
             # «2.10» -> «два десять», «192.168.1.1» -> «сто девяносто два …»
             reading = " ".join(
                 " ".join(numerals.cardinal_words(int(g)))
-                for g in m.group(1).split("."))
+                for g in chain.split("."))
             self.report.number_normalized(m.group(0), reading)
             return " " + reading + " "
 
-        text = re.sub(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3})+)(?!\d)(?!\.\d)",
+        text = re.sub(r"(?<![\d.])(?!0\.\d{1,3}(?!\.))(\d{1,3}(?:\.\d{1,3})+)"
+                      r"(?!\d)(?!\.\d)"
+                      r"(?!\s*(?:кг|км|мм|см|мл|нм|г|м|л|т|гц|мгц|кгц|"
+                      r"вт|квт|гб|мб|кб|тб|тыс\.?|млн|млрд|"
+                      r"руб\.?|коп\.?)(?![а-яёА-ЯЁa-zA-Z]))",
                       chain_repl, text)
         return text
 

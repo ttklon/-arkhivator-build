@@ -99,3 +99,16 @@ def test_ascii_quotes_keep_ssml():
     # пара кавычек через тег не разваливается
     out2 = c.clean('Он сказал "слова <emphasis>жирно</emphasis> дальше" и ушёл.')
     assert out2.count("«") == 1 and out2.count("»") == 1
+
+
+def test_superscript_units_not_footnotes():
+    """«м²», «см³», «м/с²» — единицы, а не сноски: cleaner не должен
+    вырезать из них надстрочные цифры (нормализатор читает их словами)."""
+    from lektor.textproc.cleaner import Cleaner
+    from lektor.report import Report
+    c = Cleaner(Report())
+    assert c.clean("Площадь 100 м² и 30 см³.") == "Площадь 100 м² и 30 см³."
+    assert c.clean("Ускорение 9,8 м/с².") == "Ускорение 9,8 м/с²."
+    assert c.clean("Поле 5 км² и 10 мм².") == "Поле 5 км² и 10 мм²."
+    # настоящие сноски после слов — удаляются
+    assert c.clean("Сноска¹ и ещё² тут.") == "Сноска и ещё тут."
