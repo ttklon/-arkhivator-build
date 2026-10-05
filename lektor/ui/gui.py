@@ -56,9 +56,35 @@ class App(ctk.CTk):
         self._last_report = ""
 
         self._build_layout()
+
+        # горячие клавиши: Ctrl+O — открыть файл, Ctrl+Enter — озвучить,
+        # Ctrl+M — разметка, Ctrl+B — папка, Esc — отменить сборку
+        self.bind("<Control-o>", lambda e: (self.open_file(), "break")[1])
+        self.bind("<Control-O>", lambda e: (self.open_file(), "break")[1])
+        self.bind("<Control-Return>", lambda e: self._hotkey_synth())
+        self.bind("<Control-m>", lambda e: (self.show_markup(), "break")[1])
+        self.bind("<Control-M>", lambda e: (self.show_markup(), "break")[1])
+        self.bind("<Control-b>", lambda e: (self.batch_folder(), "break")[1])
+        self.bind("<Control-B>", lambda e: (self.batch_folder(), "break")[1])
+        self.bind("<Escape>", lambda e: self._hotkey_cancel())
+
         self.after(100, self._poll_queue)
         self.after(200, self._load_engines)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _hotkey_synth(self):
+        """Ctrl+Enter: запустить озвучку (и не вставлять перевод строки)."""
+        self.start_job()
+        return "break"
+
+    def _hotkey_cancel(self):
+        """Esc: отменить сборку, если она идёт."""
+        try:
+            if str(self.btn_cancel.cget("state")) != "disabled":
+                self.cancel_job()
+        except Exception:
+            pass
+        return "break"
 
     # ==================================================================
     # Разметка окна
@@ -165,6 +191,11 @@ class App(ctk.CTk):
         self.lbl_status = ctk.CTkLabel(right, text="Готов к работе", text_color="#8fa3b8",
                                        justify="left", anchor="w")
         self.lbl_status.pack(fill="x", pady=2)
+        # подсказка о горячих клавишах
+        ctk.CTkLabel(right, text="Ctrl+O — открыть · Ctrl+Enter — озвучить\n"
+                                 "Ctrl+M — разметка · Ctrl+B — папка · Esc — отмена",
+                     text_color="#6d7f93", font=ctk.CTkFont(size=11),
+                     justify="left", anchor="w").pack(fill="x", pady=(0, 2))
         self.btn_cancel = ctk.CTkButton(right, text="Отменить", height=28,
                                         fg_color="#7a3b3b", hover_color="#933",
                                         command=self.cancel_job, state="disabled")

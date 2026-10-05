@@ -979,6 +979,17 @@ class TextNormalizer:
             return forms[2]
         return forms[0] if n % 10 == 1 else forms[1] if n % 10 in (2, 3, 4) else forms[2]
 
+    # «0,5 тыс./млн/млрд» — живые формы по падежам
+    # («полтысячи», «около полумиллиона», «с полумиллиардом»)
+    _HALF_AMOUNT = {
+        "тыс": {"nomn": "полтысячи", "accs": "полтысячи", "gent": "полутысячи",
+                "datv": "полутысяче", "ablt": "полутысячей", "loct": "полутысяче"},
+        "млн": {"nomn": "полмиллиона", "accs": "полмиллиона", "gent": "полумиллиона",
+                "datv": "полумиллиону", "ablt": "полумиллионом", "loct": "полумиллионе"},
+        "млрд": {"nomn": "полмиллиарда", "accs": "полмиллиарда", "gent": "полумиллиарда",
+                 "datv": "полумиллиарду", "ablt": "полумиллиардом", "loct": "полумиллиарде"},
+    }
+
     def _amounts(self, text: str) -> str:
         def repl(m):
             raw = m.group(1).replace(",", ".")
@@ -994,15 +1005,25 @@ class TextNormalizer:
                     case = PREP_CASES[pw]
             if "." in raw:
                 ip, fr = raw.split(".", 1)
-                # «полтора миллиарда» — ед. число; при склонении — мн.:
-                # «с полутора миллиардами»; «полторы тысячи» — по роду
-                # единицы (тысяча — женский)
-                base = forms[1] if case == "nomn" else forms[2]
-                words = numerals.decimal_words(int(ip), fr, gender) + [base]
+                # «0,5 тыс.» -> «полтысячи», «0,5 млн» -> «полмиллиона»,
+                # «около 0,5 млрд» -> «около полумиллиарда» — форма уже
+                # готова по таблице падежей, повторно не склоняем
+                if ip == "0" and fr.rstrip("0") == "5":
+                    table = self._HALF_AMOUNT[unit_key]
+                    words = [table.get(case, table["nomn"])]
+                    half_done = True
+                else:
+                    # «полтора миллиарда» — ед. число; при склонении — мн.:
+                    # «с полутора миллиардами»; «полторы тысячи» — по роду
+                    # единицы (тысяча — женский)
+                    base = forms[1] if case == "nomn" else forms[2]
+                    words = numerals.decimal_words(int(ip), fr, gender) + [base]
+                    half_done = False
             else:
                 n = int(raw)
                 words = numerals.cardinal_words(n, gender) + [self._plural_unit(n, forms)]
-            if case != "nomn":
+                half_done = False
+            if case != "nomn" and not half_done:
                 # единица измерения — во множественном числе:
                 # «с двумя тысячами», а не «с двумя тысячей»
                 head = numerals.inflect_words(words[:-1], case)
@@ -1187,10 +1208,21 @@ class TextNormalizer:
                     # неизменяемая, слово «процентов» не добавляем
                     if ip == "0" and fr == "5":
                         words = ["полпроцента"]
-                    elif ip == "0" and fr == "25":
-                        words = ["четверть", "процента"]
-                    elif ip == "0" and fr == "75":
-                        words = ["три", "четверти", "процента"]
+                    elif ip == "0" and fr in ("25", "75"):
+                        # «от 0,25% до 0,75%» -> «от четверти процента
+                        # до трёх четвертей процента» — падеж по
+                        # предлогу/контексту перед числом
+                        before = text[:m.start()].rstrip()
+                        pw = before.split()[-1].lower() if before.split() else ""
+                        if pw in PREP_CASES:
+                            case = PREP_CASES[pw]
+                        elif pw in ("пределах", "пределы", "рамках", "порядка",
+                                    "порядке", "размере", "объёме", "объеме"):
+                            case = "gent"
+                        else:
+                            case = "nomn"
+                        table = self._THREE_Q if fr == "75" else self._QUARTER
+                        words = table.get(case, table["nomn"]) + ["процента"]
                     else:
                         words = numerals.decimal_words(int(ip), fr)
                         if words[-2:] == ["с", "половиной"] or words[0] == "полтора":

@@ -701,3 +701,25 @@ def test_fractional_square_meters():
     assert "три с половиной кубических метров" in out
     out2 = n.normalize_sentence("Комната 21,2 м².")
     assert "двадцать одна целая две десятых" in out2
+
+
+def test_half_amounts():
+    """«0,5 тыс.» -> «полтысячи», «0,5 млн» -> «полмиллиона» (с падежами)."""
+    n = make()
+    out = n.normalize_sentence("Сумма 0,5 тыс. рублей и 0,5 млн.")
+    assert "полтысячи рублей" in out
+    assert "полмиллиона" in out
+    assert "ноль целых" not in out
+    out2 = n.normalize_sentence("Около 0,5 тыс. и с 0,5 млрд на счету.").lower()
+    assert "около полутысячи" in out2
+    assert "с полумиллиардом" in out2
+
+
+def test_quarter_percent_inflected():
+    """«в пределах 0,25%» -> «в пределах четверти процента»."""
+    n = make()
+    out = n.normalize_sentence("В пределах 0,25% и от 0,75% нормы.")
+    assert "в пределах четверти процента" in out.lower()
+    assert "от трёх четвертей процента" in out.lower()
+    out2 = n.normalize_sentence("В рамках 0,25% допуска.")
+    assert "в рамках четверти процента" in out2.lower()
