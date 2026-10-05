@@ -803,3 +803,36 @@ def test_i_pr_short():
     n = TextNormalizer(Report())
     assert n.normalize_sentence("Расторжение, убытки и пр. последствия.") == \
         "Расторжение, убытки и прочие последствия."
+
+
+def test_tom_volume():
+    """«т. 3» — том (не буква «тэ» и не тонна)."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    assert n.normalize_sentence("Материалы в т. 2 изъяты.") == "Материалы в том 2 изъяты.".replace("2", "два")
+    # тонна после числа — по-прежнему тонна
+    assert "тонн" in n.normalize_sentence("Масса 5 т.")
+
+
+def test_list_dela():
+    """«л.д.» — лист дела с падежом от предлога, не «лист дэ»."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    out = n.normalize_sentence("На л.д. 55 имеется договор.")
+    assert "листе дела" in out and "дэ" not in out
+    assert "договор" in out
+
+
+def test_measure_dot_not_sentence_end():
+    """«в 5 т. содержится» — точка сокращения меры не рвёт фразу."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    out = n.normalize_sentence("В 5 т. содержится правило.")
+    assert out == "В 5 тонн содержится правило.".replace("5 тонн", "пять тонн")
+    # конец предложения — точка сохраняется
+    assert n.normalize_sentence("Масса 5 т.").endswith("пять тонн.")
+    # тире после меры — продолжение фразы
+    assert "килограмма — это" in n.normalize_sentence("Проверка: 3 кг. — это вес.")
