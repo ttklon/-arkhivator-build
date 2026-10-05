@@ -782,27 +782,35 @@ class TextNormalizer:
         text = rx_single_lo.sub(lambda m: unit_repl(m), text)
         return rx_single_up.sub(lambda m: unit_repl(m), text)
 
-    def _square_meters(self, raw: str, orig: str) -> str:
-        n = int(raw.replace(",", "").replace(".", "")) if "." not in raw and "," not in raw \
-            else int(float(raw.replace(",", ".")))
+    @staticmethod
+    def _measure_words(raw: str, forms) -> list:
+        """Число + единица площади/объёма: «2,5 м²» -> «два с половиной
+        квадратных метра» (дробь не обрубается до целого)."""
+        r = raw.replace(",", ".")
+        if "." in r:
+            ip, fr = r.split(".", 1)
+            # при дроби единица — родительный множественный
+            return (numerals.decimal_words(int(ip), fr)
+                    + [forms[2]])
+        n = int(r)
         words = numerals.cardinal_words(n)
         if 11 <= n % 100 <= 14 or n % 10 not in (1,):
-            unit = "квадратных " + self._plural_unit(n, ("метр", "метра", "метров"))
+            words.append(forms[2])
         else:
-            unit = "квадратный метр"
-        reading = " ".join(words) + " " + unit
+            words.append(forms[0])
+        return words
+
+    def _square_meters(self, raw: str, orig: str) -> str:
+        words = self._measure_words(raw, ("квадратный метр", "квадратных метра",
+                                          "квадратных метров"))
+        reading = " ".join(words)
         self.report.number_normalized(orig, reading)
         return reading
 
     def _cubic_meters(self, raw: str, orig: str) -> str:
-        n = int(raw.replace(",", "").replace(".", "")) if "." not in raw and "," not in raw \
-            else int(float(raw.replace(",", ".")))
-        words = numerals.cardinal_words(n)
-        if 11 <= n % 100 <= 14 or n % 10 not in (1,):
-            unit = "кубических " + self._plural_unit(n, ("метр", "метра", "метров"))
-        else:
-            unit = "кубический метр"
-        reading = " ".join(words) + " " + unit
+        words = self._measure_words(raw, ("кубический метр", "кубических метра",
+                                          "кубических метров"))
+        reading = " ".join(words)
         self.report.number_normalized(orig, reading)
         return reading
 

@@ -298,7 +298,10 @@ def decimal_words(int_part: int, frac: str, gender: str = "m") -> list[str]:
     if not d:
         return cardinal_words(int_part, gender) + ["запятая"] + list(frac)
     frac_n = int(frac)
-    words = cardinal_words(int_part, gender)
+    # «одна целая» — числительное при слове «целая» всегда женского
+    # рода («двадцать одна целая две десятых»), даже если единица
+    # измерения мужская
+    words = cardinal_words(int_part, "f" if int_part % 10 == 1 and int_part % 100 != 11 else gender)
     words.append("целая" if int_part % 10 == 1 and int_part % 100 != 11 else "целых")
     words.extend(cardinal_words(frac_n, "f"))
     words.append(plural(frac_n, *d))

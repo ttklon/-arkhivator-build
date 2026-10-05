@@ -691,3 +691,13 @@ def test_quarter_percent():
     out = n.normalize_sentence("Рост 0,25% и падение 0,75%.").lower()
     assert "четверть процента" in out
     assert "три четверти процента" in out
+
+
+def test_fractional_square_meters():
+    """«2,5 м²» — дробь не обрубается до целого («два с половиной…»)."""
+    n = make()
+    out = n.normalize_sentence("Площадь 2,5 м² и объём 3,5 м³.")
+    assert "два с половиной квадратных метров" in out
+    assert "три с половиной кубических метров" in out
+    out2 = n.normalize_sentence("Комната 21,2 м².")
+    assert "двадцать одна целая две десятых" in out2
