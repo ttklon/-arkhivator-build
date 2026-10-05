@@ -78,8 +78,15 @@ def _read_html(path: str) -> str:
 
 
 def _read_docx(path: str) -> str:
-    import docx  # python-docx
-    d = docx.Document(path)
+    try:
+        import docx  # python-docx
+        d = docx.Document(path)
+    except ImportError:
+        raise RuntimeError("не установлен python-docx: запустите install.bat "
+                           "или «pip install python-docx»")
+    except Exception:
+        raise RuntimeError("файл повреждён или не является документом Word (.docx); "
+                           "для старого формата .doc пересохраните как .docx или .txt")
     parts = [p.text for p in d.paragraphs if p.text and p.text.strip()]
     # таблицы тоже содержат важный текст
     for table in d.tables:
@@ -91,12 +98,22 @@ def _read_docx(path: str) -> str:
 
 
 def _read_pdf(path: str) -> str:
-    import fitz  # PyMuPDF
-    doc = fitz.open(path)
+    try:
+        import fitz  # PyMuPDF
+        doc = fitz.open(path)
+    except ImportError:
+        raise RuntimeError("не установлен PyMuPDF: запустите install.bat "
+                           "или «pip install PyMuPDF»")
+    except Exception:
+        raise RuntimeError("файл повреждён или не является документом PDF")
     pages = []
     for page in doc:
         pages.append(page.get_text("text"))
-    return "\n\n".join(pages)
+    text = "\n\n".join(pages)
+    if not text.strip():
+        raise RuntimeError("в PDF нет текстового слоя — похоже на скан; "
+                           "распознайте текст (OCR) и сохраните как .txt/.docx")
+    return text
 
 
 def _read_book(path: str) -> str:

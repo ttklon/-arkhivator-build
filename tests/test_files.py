@@ -27,3 +27,31 @@ def test_txt_encodings(tmp_path):
     p2 = tmp_path / "utf16.txt"
     p2.write_bytes("Другая кодировка.".encode("utf-16"))
     assert "Другая" in read_file(str(p2))
+
+
+def test_broken_docx_human_message(tmp_path):
+    """Повреждённый .docx — понятное сообщение вместо техжаргона."""
+    import pytest
+    from lektor.textproc.files import read_file
+    bad = tmp_path / "битый.docx"
+    bad.write_text("это не docx", encoding="utf-8")
+    with pytest.raises(RuntimeError) as e:
+        read_file(str(bad))
+    assert "повреждён" in str(e.value) or "docx" in str(e.value)
+
+
+def test_pdf_scan_no_text_layer(tmp_path):
+    """PDF без текстового слоя — подсказка про скан/OCR."""
+    import pytest
+    from lektor.textproc.files import read_file
+    try:
+        import fitz  # noqa
+    except ImportError:
+        pytest.skip("PyMuPDF не установлен")
+    doc = fitz.Document()
+    doc.new_page()
+    scan = tmp_path / "скан.pdf"
+    doc.save(str(scan))
+    with pytest.raises(RuntimeError) as e:
+        read_file(str(scan))
+    assert "текстового слоя" in str(e.value) or "скан" in str(e.value)

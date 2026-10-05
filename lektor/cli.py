@@ -296,7 +296,11 @@ def batch(a, settings) -> int:
         path = os.path.join(a.input, name)
         print(f"\n[{i}/{len(files)}] {name}")
         try:
-            res = pipe.run(read_any(path), os.path.splitext(name)[0])
+            src = read_any(path)
+            if not src.strip():
+                print("  пропущен: текста нет (пустой файл или PDF-скан)")
+                continue
+            res = pipe.run(src, os.path.splitext(name)[0])
             if res.audio_path:
                 ok += 1
                 if getattr(res, "audio_paths", None):
