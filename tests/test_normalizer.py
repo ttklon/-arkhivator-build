@@ -734,3 +734,15 @@ def test_gent_context_quarters_and_amounts():
     out2 = n.normalize_sentence("Не более 1,5 тыс. и свыше 0,5 млн руб.")
     assert "не более полутора тысяч" in out2.lower()
     assert "свыше полумиллиона" in out2.lower()
+
+
+def test_new_abbreviations():
+    """ДТП/СМЭ/ЖКХ читаются по буквам; ОВД/КТС разворачиваются при первом упоминании."""
+    n = make()
+    out = n.normalize_sentence("Оформлено ДТП, услуги ЖКХ оплачены.")
+    assert "дэ тэ пэ" in out
+    assert "жэ ка ха" in out
+    out2 = n.normalize_sentence("ОВД уведомлён, НПА изучен.")
+    assert "орган внутренних дел" in out2
+    assert "нормативно-правовой акт" in out2
+    assert "далее" in out2
