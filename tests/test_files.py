@@ -55,3 +55,16 @@ def test_pdf_scan_no_text_layer(tmp_path):
     with pytest.raises(RuntimeError) as e:
         read_file(str(scan))
     assert "текстового слоя" in str(e.value) or "скан" in str(e.value)
+
+
+def test_ssml_broken_tags_survive():
+    """Битые/чужие SSML-теги не ломают чтение — удаляются, текст остаётся."""
+    from lektor.textproc.ssml import extract_ssml
+    from lektor.report import Report
+    r = Report()
+    res = extract_ssml('Текст <break time="abc"> мусор и <speak>незакрытый.', r)
+    assert "мусор" in res.text and "незакрытый" in res.text
+    assert "<" not in res.text
+    res2 = extract_ssml('<script>alert(1)</script> после тега.', r)
+    # сам тег исчезает; содержимое тега остаётся текстом (не ломает конвейер)
+    assert "после тега" in res2.text

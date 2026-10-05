@@ -215,10 +215,26 @@ def doctor() -> int:
     dicts = os.path.join(APP_DIR, "lektor", "dictionaries")
     for d in ("homographs.json", "legal_stress.json",
               "abbreviations.json", "letters.json"):
-        ok = os.path.exists(os.path.join(dicts, d))
-        print(f"  [{' ОК ' if ok else 'НЕТ'}] {d}")
-        if not ok:
-            fails.append("переустановите приложение — словари повреждены")
+        p = os.path.join(dicts, d)
+        exists = os.path.exists(p)
+        valid = exists
+        if exists:
+            # файл может быть побит при копировании — проверяем, что JSON
+            # разбирается (иначе программа молча работает без словаря)
+            try:
+                import json as _json
+                with open(p, "r", encoding="utf-8") as f:
+                    _json.load(f)
+            except Exception:
+                valid = False
+        if not exists:
+            print(f"  [НЕТ] {d}")
+            fails.append("переустановите приложение — словари отсутствуют")
+        elif not valid:
+            print(f"  [НЕТ] {d} — файл повреждён (не разбирается)")
+            fails.append(f"восстановите файл {d} (переустановите приложение)")
+        else:
+            print(f"  [ ОК ] {d}")
 
     print("Модель голоса Silero:")
     ensure_dirs()
