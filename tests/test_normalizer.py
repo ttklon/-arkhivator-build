@@ -836,3 +836,28 @@ def test_measure_dot_not_sentence_end():
     assert n.normalize_sentence("Масса 5 т.").endswith("пять тонн.")
     # тире после меры — продолжение фразы
     assert "килограмма — это" in n.normalize_sentence("Проверка: 3 кг. — это вес.")
+
+
+def test_plural_refs():
+    """«ст.ст. 158» и «п.п. 1, 2» — множественные ссылки с падежом от предлога."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    assert n.normalize_sentence("Нарушены ст.ст. 158 и 159 УК РФ.").startswith(
+        "Нарушены статьи сто пятьдесят восемь")
+    assert n.normalize_sentence("Нарушены ст. ст. 158 и 159 УК РФ.").startswith(
+        "Нарушены статьи")
+    assert "пунктам" in n.normalize_sentence("Согласно п.п. 1, 2 и 3 договора.")
+    assert "статей" in n.normalize_sentence("Из ст.ст. 158, 159 УК РФ следует.")
+    assert "пунктах" in n.normalize_sentence("В п.п. 2-5 договора указано.")
+    # одиночная ссылка не затронута
+    assert "статья" in n.normalize_sentence("Нарушена ст. 158 УК РФ.")
+
+
+def test_stranica_ref():
+    """«стр. 12» — страница (не пауза и не буквы)."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    out = n.normalize_sentence("См. стр. 12 решения.")
+    assert "страница" in out and "двенадцать" in out
