@@ -24,6 +24,10 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(
         prog="lektor",
         description="«Лектор» — текст в аудиолекцию (полностью офлайн).")
+    from . import __version__
+    p.add_argument("--version", action="version",
+                   version="Лектор " + __version__,
+                   help="показать версию и выйти")
     p.add_argument("input", nargs="?", help="файл .txt/.docx/.pdf/.fb2/.epub или «-» для stdin")
     p.add_argument("-t", "--text", help="текст прямо из аргумента")
     p.add_argument("-o", "--output", help="итоговый файл (mp3/wav) или папка")
@@ -176,7 +180,8 @@ def main(argv=None) -> int:
 
 def doctor() -> int:
     """Самодиагностика: что стоит, чего не хватает, что делать."""
-    print("Лектор — самодиагностика")
+    from . import __version__
+    print(f"Лектор {__version__} — самодиагностика")
     print("=" * 52)
     import importlib
     fails = []

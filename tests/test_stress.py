@@ -133,3 +133,51 @@ def test_zamok_muka_homographs():
     assert "мук+а" in out3
     out4 = sa.stress_sentence("Муки ожидания описаны.")
     assert "М+уки" in out4
+
+
+def test_hyphen_words_get_stress():
+    """Дефисные слова размечаются, а не уходят в модель «оголёнными»."""
+    s = make()
+    out = s.stress_sentence("Кто-то что-то знает по-прежнему.")
+    low = out.lower()
+    assert "кт+ото" in low and "чт+ото" in low
+    assert "по-пр+ежнему" in low
+    # двойных знаков и разрывов нет
+    assert "++" not in out and "+-" not in out
+
+
+def test_hyphen_clitics_unstressed():
+    """Клитики «-нибудь», «-либо», «кое-» безударны."""
+    s = make()
+    out = s.stress_sentence("Как-нибудь кое-кто где-либо появится.")
+    low = out.lower()
+    assert "к+ак-нибудь" in low
+    assert "кое-кт+о" in low
+    assert "н+ибудь" not in low and "л+ибо" not in low and "к+ое-" not in low
+
+
+def test_half_word_stress():
+    """«пол-» формы: silero ошибается на «полгода/поллитра» — справочник точных ударений."""
+    s = make()
+    assert "полгод+а" in s.stress_sentence("полгода").lower()
+    assert "пол-литр+а" in s.stress_sentence("пол-литра").lower()
+    assert "полчас+а" in s.stress_sentence("полчаса").lower()
+    assert "полутор+а" in s.stress_sentence("полутора").lower()
+    # ошибочные первые-слоговые варианты исключены
+    assert "п+олгода" not in s.stress_sentence("полгода").lower()
+
+
+def test_ready_stress_not_duplicated():
+    """«пол-» формы в предложении: по одному знаку на слово, без дублей."""
+    s = make()
+    out = s.stress_sentence("Прошло полчаса и пол-литра.")
+    assert "полчас+а" in out.lower() and "пол-литр+а" in out.lower()
+    assert out.count("+") == 3  # прошл+о, полчас+а, пол-литр+а (служебное «и» — без знака)
+    assert "++" not in out
+
+
+def test_service_hyphen_left_alone():
+    """«из-за» целиком служебное — без знаков."""
+    s = make()
+    out = s.stress_sentence("Из-за дождя.")
+    assert "из-за" in out.lower() and "+" not in out.lower().split("из-за")[0]

@@ -33,7 +33,8 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.settings: Settings = load_settings()
-        self.title("Лектор — текст в аудиолекцию")
+        from .. import __version__
+        self.title("Лектор " + __version__ + " — текст в аудиолекцию")
         self.geometry("1150x740")
         # восстанавливаем размер и положение окна прошлого запуска
         try:

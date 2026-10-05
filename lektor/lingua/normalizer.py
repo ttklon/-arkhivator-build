@@ -106,6 +106,7 @@ class TextNormalizer:
         text = self._amounts(text)           # 5 млн, 2 тыс. (согласование)
         text = self._measures(text)          # 5 кг, 60 км/ч, 100 м², −5 °C
         text = self._money_time_percent(text)
+        text = self._half_units(text)        # 0,5 часа -> «полчаса»
         text = self._numbers(text)           # остальные числа с согласованием
         text = self._abbreviations(text)     # УК РФ и пр. (тр. 7, 23)
         text = re.sub(r"\s+([.,;:!?…])", r"\1", text)
@@ -953,9 +954,10 @@ class TextNormalizer:
             if "." in raw:
                 ip, fr = raw.split(".", 1)
                 # «полтора миллиарда» — ед. число; при склонении — мн.:
-                # «с полутора миллиардами»
+                # «с полутора миллиардами»; «полторы тысячи» — по роду
+                # единицы (тысяча — женский)
                 base = forms[1] if case == "nomn" else forms[2]
-                words = numerals.decimal_words(int(ip), fr) + [base]
+                words = numerals.decimal_words(int(ip), fr, gender) + [base]
             else:
                 n = int(raw)
                 words = numerals.cardinal_words(n, gender) + [self._plural_unit(n, forms)]
@@ -974,7 +976,11 @@ class TextNormalizer:
             self.report.number_normalized(m.group(0), reading)
             return " " + reading + " "
 
-        rx = (r"(\d+(?:[.,]\d+)?)\s*(тыс\.?|млн\.?|млрд\.?)"
+        # граница после единицы обязательна: без неё «1,5 тысячи»
+        # обрезается до «1,5 тыс» и остаётся хвост «ячи»; но «тыс.руб.»
+        # без пробела — легальная запись, её пропускаем
+        rx = (r"(?<![А-ЯЁа-яё\d])(\d+(?:[.,]\d+)?)\s*(тыс\.?|млн\.?|млрд\.?)"
+              r"(?:(?![а-яёА-ЯЁ])|(?=\s*(?:руб|коп)))"
               r"\s*((?:руб|коп)\.?(?![а-яёА-ЯЁ]))?")
         return re.sub(rx, lambda m: repl(m), text)
 
@@ -1080,8 +1086,9 @@ class TextNormalizer:
         def money_repl(m):
             n = int(m.group(1).replace(" ", "").replace("\u00a0", ""))
             cur = (m.group(3) or "").lower().rstrip(".")
-            # «100 000,50 руб.» — сумма с копейками
-            kop = int(m.group(2)) if m.group(2) else None
+            # «100 000,50 руб.» — сумма с копейками; «,5» руб = 50 коп.,
+            # поэтому дробную часть дополняем до двух разрядов
+            kop = int(m.group(2).ljust(2, "0")) if m.group(2) else None
             if cur in ("₽", "р", "руб", "рубль", "рубля", "рублей"):
                 reading = " ".join(numerals.rubles_words(n))
                 if kop:
@@ -1095,8 +1102,11 @@ class TextNormalizer:
             self.report.number_normalized(m.group(0), reading)
             return " " + reading + " "
 
-        text = re.sub(r"(\d[\d\u00a0 ]*)(?:\s*,\s*(\d{1,2}))?\s*"
-                      r"(₽|рублей|рубля|рубль|руб\.?|р\.|копейки|копеек|коп\.?)",
+        # границы слова обязательны: без них «с 1,5 рублями» рвёт слово
+        # («…рублями» -> «…рубль пятьдесят копеек ми»)
+        text = re.sub(r"(?<![А-ЯЁа-яё\d])(\d[\d\u00a0 ]*)(?:\s*,\s*(\d{1,2}))?\s*"
+                      r"(₽|рублей|рубля|рубль|руб\.?|р\.|копейки|копеек|коп\.?)"
+                      r"(?![А-ЯЁа-яё])",
                       money_repl, text)
 
         def pct_repl(m):
@@ -1105,13 +1115,19 @@ class TextNormalizer:
                 if "." in n:
                     ip, fr = n.split(".", 1)
                     fr = fr.rstrip("0") or "0"
-                    words = numerals.decimal_words(int(ip), fr)
-                    if words[-2:] == ["с", "половиной"] or words[0] == "полтора":
-                        words.append("процента" if words[0] in ("полтора",) or
-                                     int(ip) % 10 in (2, 3, 4) and int(ip) % 100 not in (12, 13, 14)
-                                     else "процентов")
+                    # «0,5%» -> «полпроцента» — так говорят, а не
+                    # «ноль целых пять десятых процента»; форма
+                    # неизменяемая, слово «процентов» не добавляем
+                    if ip == "0" and fr == "5":
+                        words = ["полпроцента"]
                     else:
-                        words.append("процента" if int(fr) in (2, 3, 4) else "процентов")
+                        words = numerals.decimal_words(int(ip), fr)
+                        if words[-2:] == ["с", "половиной"] or words[0] == "полтора":
+                            words.append("процента" if words[0] in ("полтора",) or
+                                         int(ip) % 10 in (2, 3, 4) and int(ip) % 100 not in (12, 13, 14)
+                                         else "процентов")
+                        else:
+                            words.append("процента" if int(fr) in (2, 3, 4) else "процентов")
                 else:
                     words = numerals.percent_words(int(n))
                 reading = " ".join(words)
@@ -1142,6 +1158,37 @@ class TextNormalizer:
         return re.sub(r"\s+", " ", text).strip()
 
     # ==================================================================
+    # 7а. Половинные единицы: «0,5 часа» -> «полчаса», «0,5 суток» ->
+    # «полсуток», «0,5 лет» -> «полгода». Живой язык, а не «ноль целых
+    # пять десятых часа».
+    _HALF_UNITS = {"час", "сутки", "год", "день", "неделя", "месяц",
+                   "метр", "километр", "килограмм", "грамм", "тонна",
+                   "литр", "страница", "процент"}
+
+    def _half_units(self, text: str) -> str:
+        rx = re.compile(r"(?<![\d.,])0[.,]50?(?!\d)\s+([А-ЯЁа-яё]+)")
+
+        def repl(m):
+            word = m.group(1)
+            # слово с заглавной — возможно, имя собственное или аббревиатура
+            if word[0].isupper():
+                return m.group(0)
+            p = analyze(word)
+            nf = str(getattr(p, "normal_form", "") or "").lower() if p is not None else ""
+            if nf not in self._HALF_UNITS:
+                return m.group(0)
+            # «пол-» пишется через дефис перед гласной и «л»
+            # («пол-литра», «пол-урока»), иначе слитно («полчаса»)
+            gent = (inflect_word(nf, {"gent"}) or word).lower()
+            half = "пол-" if gent[:1] in ("л", "а", "е", "ё", "и", "о", "у",
+                                          "ы", "э", "ю", "я") else "пол"
+            reading = half + gent
+            self.report.number_normalized(m.group(0), reading)
+            return " " + reading + " "
+
+        return rx.sub(repl, text)
+
+    # ==================================================================
     # 8. Остальные числа — с грамматическим согласованием
     # существительные, которые с «в/во/по/с/со» ведут себя как предлоги
     # родительного падежа
@@ -1150,6 +1197,11 @@ class TextNormalizer:
                  "соответствие", "истечении", "окончании",
                  "продолжении", "продолжение", "результате", "пользу",
                  "качестве", "лицо", "лица"}
+
+    # предлоги винительного падежа (в т.ч. двупадежные в/на/о/под):
+    # родительная форма существительного после числа для них —
+    # артефакт управления числом, а не падеж предложения
+    _ACCS_PREPS = {"через", "за", "про", "в", "во", "на", "о", "об", "под"}
 
     def _numbers(self, text: str) -> str:
         rx = re.compile(r"(\d{1,3}(?:[\s\u00a0]\d{3})+|\d+)(?:[.,](\d+))?")
@@ -1196,14 +1248,39 @@ class TextNormalizer:
                         nc = word_case(tok.text)
                         if nc:
                             case = nc
+                        # форма существительного после числа — род. падеж
+                        # по вине самого числа («5 километров»), а не
+                        # предложения: для предлогов винительного
+                        # («через», «за», «про») и двупадежных («в»,
+                        # «на», «о», «под») считаем её артефактом:
+                        # «через 5 километров» -> «через пять километров»,
+                        # но «на 5 страницах» -> «на пяти страницах»
+                        if case == "gent" and prev_word in self._ACCS_PREPS:
+                            case = "nomn"
                         break
                     if tok.text in {",", ".", ";"}:
                         break
             if frac:
-                words = numerals.decimal_words(ip, frac)
+                # род следующего существительного: «1,5 минуты» ->
+                # «полторы минуты», «2,5 тысячи» -> «две с половиной
+                # тысячи» (тысяча, минута — женский род)
+                gender = "m"
+                after = text[m.end():].lstrip()
+                for tok in split_tokens(after)[:3]:
+                    if tok.is_word:
+                        pa = analyze(tok.text)
+                        if pa is not None and pa.tag and \
+                                str(pa.tag.gender) == "femn":
+                            gender = "f"
+                        break
+                    if tok.text in {",", ".", ";"}:
+                        break
+                words = numerals.decimal_words(ip, frac, gender)
             else:
                 words = numerals.cardinal_words(ip)
-            if case != "nomn" and not frac:
+            # дробные тоже склоняются: «от 2,5 км» -> «от двух с
+            # половиной километров», «с 1,5 руб.» -> «с полутора …»
+            if case != "nomn":
                 words = numerals.inflect_words(words, case)
             reading = " ".join(words)
             self.report.number_normalized(raw.replace("\u00a0", " "), reading)

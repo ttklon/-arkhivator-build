@@ -14,6 +14,8 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Optional
 
+from . import __version__
+
 
 @dataclass
 class Event:
@@ -115,7 +117,8 @@ class Report:
         self.stats["время_сборки_сек"] = self.stats.get("время_сборки_сек") or round(
             (datetime.now() - self.started).total_seconds(), 1)
         lines = [f"ОТЧЁТ ОБ ОЗВУЧКЕ — «{self.title}»",
-                 f"Дата: {self.started.strftime('%d.%m.%Y %H:%M')}", ""]
+                 f"Дата: {self.started.strftime('%d.%m.%Y %H:%M')}",
+                 f"Программа: Лектор {__version__}", ""]
         s = self.stats
         lines.append("Статистика: "
                      f"слов {s.get('слов', 0)}, предложений {s.get('предложений', 0)}, "

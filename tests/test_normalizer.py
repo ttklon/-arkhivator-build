@@ -551,3 +551,80 @@ def test_legal_phrase_article_case():
     assert "силу статьи" in out
     out2 = n.normalize_sentence("Иск подан в порядке ст. 131 ГПК РФ.")
     assert "в порядке статьи" in out2
+
+
+def test_half_units():
+    """«0,5 часа» -> «полчаса», «0,5 суток» -> «полсуток» (тр. 24)."""
+    n = make()
+    out = n.normalize_sentence("Подождите 0,5 часа и 0,5 суток.")
+    assert "полчаса" in out and "полсуток" in out
+    assert "ноль целых" not in out
+    out2 = n.normalize_sentence("Срок 0,5 года, то есть 0,5 лет.")
+    assert out2.count("полгода") == 2
+    out3 = n.normalize_sentence("Объём 0,5 литра и рост 0,5 процента.")
+    assert "пол-литра" in out3 and "полпроцента" in out3
+
+
+def test_half_percent():
+    """«0,5%» -> «полпроцента» — живая форма без «ноль целых»."""
+    n = make()
+    out = n.normalize_sentence("Инфляция 0,5% и ещё 0,50%.")
+    assert out.count("полпроцента") == 2
+    assert "процентов" not in out
+
+
+def test_kopecks_padding():
+    """«100 000,5 руб.» — это 50 копеек, а не 5 (разряд дроби)."""
+    n = make()
+    out = n.normalize_sentence("Заплатили 100 000,5 руб. и 2,5 рубля.")
+    assert "пятьдесят копеек" in out
+    assert "пять копеек" not in out
+    out2 = n.normalize_sentence("Сумма 100 000,05 руб.")
+    assert "пять копеек" in out2
+
+
+def test_money_word_boundaries():
+    """«с 1,5 рублями» — валюта не вырезается из середины слова."""
+    n = make()
+    out = n.normalize_sentence("С 1,5 рублями в кармане.")
+    assert "полутора рублями" in out
+    assert " копеек ми " not in out and not out.endswith("ми")
+
+
+def test_amounts_no_word_tear():
+    """«1,5 тысячи» — «тыс» не вырезается из слова «тысячи»."""
+    n = make()
+    out = n.normalize_sentence("Сумма 1,5 тысячи рублей.")
+    assert "полторы тысячи" in out
+    assert " ячи" not in out and "ячи " not in out.split("рублей")[0][-3:]
+    out2 = n.normalize_sentence("Цена 5 тыс.руб. без НДС.")
+    assert "пять тысяч рублей" in out2
+
+
+def test_fraction_gender():
+    """«1,5 минуты» -> «полторы минуты» (женский род)."""
+    n = make()
+    out = n.normalize_sentence("Через 1,5 минуты и 2,5 тысячи шагов.")
+    assert "полторы минуты" in out
+    assert "две с половиной тысячи" in out
+
+
+def test_accs_prepositions():
+    """«через 5 километров» -> «через пять километров» (винительный)."""
+    n = make()
+    out = n.normalize_sentence("Через 5 километров пути и за 10 дней.")
+    assert "ерез пять километров" in out
+    assert "а десять дней" in out
+    out2 = n.normalize_sentence("На 5 страницах и в 5 шагах.")
+    assert "на пяти страницах" in out2.lower() and "в пяти шагах" in out2.lower()
+    out3 = n.normalize_sentence("Через 1,5 часа пришёл ответ.")
+    assert "через полтора часа" in out3.lower()
+
+
+def test_fraction_inflection():
+    """«от 2,5 километров» -> «от двух с половиной километров»."""
+    n = make()
+    out = n.normalize_sentence("Отрезок от 2,5 километров до 3.")
+    assert "от двух с половиной километров" in out.lower()
+    out2 = n.normalize_sentence("Без 2,5 процентов запаса.")
+    assert "без двух с половиной процентов" in out2.lower()

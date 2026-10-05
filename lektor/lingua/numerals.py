@@ -258,8 +258,15 @@ def inflect_words(words: list[str], case: str, last_only: bool = False) -> list[
         return words
     from .morphology import inflect_word
     out = []
+    # связка «с половиной» в дробном («два с половиной») не склоняется:
+    # «от двух с половиной километров», а не «…с половины…»
+    tail_imm = len(words) >= 2 and words[-2:] == ["с", "половиной"]
+    imm_from = len(words) - 2 if tail_imm else len(words)
     for i, w in enumerate(words):
         if last_only and i != len(words) - 1:
+            out.append(w)
+            continue
+        if i >= imm_from:
             out.append(w)
             continue
         if last_only:
