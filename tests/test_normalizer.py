@@ -914,3 +914,15 @@ def test_dot_number_not_fraction():
     assert "сотых" not in out
     # запятая — по-прежнему дробь
     assert "с половиной" in n.normalize_sentence("Выплатить 12,5 процента.")
+
+
+def test_io_zam_zp():
+    """«и.о.», «зам.», «з/п» читаются словами."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    out = n.normalize_sentence("И.о. директора Иванов подписал.")
+    assert out.lower() == "исполняющий обязанности директора иванов подписал."
+    assert n.normalize_sentence("Зам. прокурора подал.").lower().startswith("заместитель")
+    assert "заместителя" in n.normalize_sentence("У зам. министра изъято.")
+    assert "зарплата" in n.normalize_sentence("Выплатить з/п за год.")
