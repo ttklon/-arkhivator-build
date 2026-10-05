@@ -723,3 +723,14 @@ def test_quarter_percent_inflected():
     assert "от трёх четвертей процента" in out.lower()
     out2 = n.normalize_sentence("В рамках 0,25% допуска.")
     assert "в рамках четверти процента" in out2.lower()
+
+
+def test_gent_context_quarters_and_amounts():
+    """«в течение 0,25 года» -> «в течение четверти года» (родительный)."""
+    n = make()
+    out = n.normalize_sentence("В течение 0,25 года и по истечении 0,25 суток.")
+    assert "в течение четверти года" in out.lower()
+    assert "по истечении четверти суток" in out.lower()
+    out2 = n.normalize_sentence("Не более 1,5 тыс. и свыше 0,5 млн руб.")
+    assert "не более полутора тысяч" in out2.lower()
+    assert "свыше полумиллиона" in out2.lower()

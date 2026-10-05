@@ -1003,6 +1003,9 @@ class TextNormalizer:
                 pw = before[-1].lower()
                 if pw in PREP_CASES:
                     case = PREP_CASES[pw]
+                # «не более 1,5 тыс.» — родительный после сравнительной
+                elif pw in ("более", "менее", "свыше"):
+                    case = "gent"
             if "." in raw:
                 ip, fr = raw.split(".", 1)
                 # «0,5 тыс.» -> «полтысячи», «0,5 млн» -> «полмиллиона»,
@@ -1304,6 +1307,14 @@ class TextNormalizer:
             before = text[:m.start()].rstrip()
             pw = before.split()[-1].lower() if before.split() else ""
             case = PREP_CASES.get(pw, "nomn")
+            # «в течение 0,25 года» -> «в течение четверти года» —
+            # отглагольные предлоги требуют родительного
+            bw = before.lower().split()
+            if len(bw) >= 2 and bw[-2] in ("в", "во", "по", "с", "со") \
+                    and pw in self._GENT_CTX:
+                case = "gent"
+            elif pw in ("более", "менее", "свыше"):
+                case = "gent"
             forms = self._THREE_Q if raw == "75" else self._QUARTER
             reading = " ".join(forms.get(case, forms["nomn"]))
             self.report.number_normalized(m.group(0), reading + " " + word.lower())
