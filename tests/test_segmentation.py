@@ -154,3 +154,20 @@ def test_wh_questions_ik2():
     assert st("Сколько дней длился процесс?") == "IK2_wh_question"
     assert st("Суд удовлетворил иск?") == "IK3_polar_question"
     assert st("Был ли ответчик извещён?") == "IK3_polar_question"
+
+
+def test_conj_adverb_light_pause():
+    """«…, поэтому …» и «…, но …» — лёгкая пауза; «не только…, но и…» целое."""
+    from lektor.lingua.syntax import SyntaxAnalyzer
+    from lektor.lingua.segmentation import Segmenter
+    from lektor.report import Report
+    sa = SyntaxAnalyzer()
+    seg = Segmenter(Report("т"), fix_commas=True)
+
+    def n_syn(text):
+        return len(seg.segment(sa.analyze_sentence(text)))
+
+    assert n_syn("Требования обоснованы, поэтому суд удовлетворяет иск.") == 2
+    assert n_syn("Ответчик признал иск, но попросил рассрочку.") == 2
+    assert n_syn("Он не только явился, но и представил документы.") == 1
+    assert n_syn("Это не столько иск, сколько жест отчаяния.") == 1

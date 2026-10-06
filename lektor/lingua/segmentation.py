@@ -20,6 +20,9 @@ from .syntax import W, TIGHT_RELS
 # ---------------------------------------------------------------------------
 # Словарные константы
 # ---------------------------------------------------------------------------
+CONJ_ADVERBS = {"поэтому", "потому", "следовательно", "значит",
+                "притом", "причём", "зато"}
+
 INTRO_WORDS = {
     "следовательно", "значит", "например", "таким образом", "по существу",
     "во-первых", "во-вторых", "в-третьих", "наконец", "причём", "причем",
@@ -206,6 +209,12 @@ class Segmenter:
             return Boundary.MEDIUM, "после вводного оборота — нормативная пауза"
         if nxt.lemma in SUBORD_CONJS or self._is_intro(nxt):
             return Boundary.MEDIUM, "перед подчинительным союзом или вводным словом"
+        # наречные союзы и «но»: лёгкая пауза, как у чтеца
+        # («…, поэтому суд…», «…, но попросил…»); «не только…, но и…»
+        # не рвём
+        if nxt.lemma in CONJ_ADVERBS or (
+                nxt.lemma == "но" and not self._only_correlation(words, comma_id)):
+            return Boundary.MEDIUM, "перед сочинительным союзом — лёгкая пауза"
         if self._is_intro_before(words, comma_id):
             return Boundary.MEDIUM, "после вводного слова или оборота — нормативная пауза"
         # «не/ни» не отрывается от своего слова — но только если это
@@ -353,6 +362,21 @@ class Segmenter:
 
     def _closes_adp_intro(self, words: List[W], comma_id: int) -> bool:
         return self._adp_intro_flank(words, comma_id, forward=False)
+
+    @staticmethod
+    def _only_correlation(words: List[W], comma_id: int) -> bool:
+        """«не только X, но и Y» / «не столько X, сколько Y» — пауза
+        перед «но»/«сколько» не нужна (единая конструкция)."""
+        back = 0
+        idx = comma_id - 1
+        while idx >= 0 and back < 3:
+            w = words[idx]
+            if w.is_word:
+                if w.lemma in ("только", "сколько", "столь", "настолько"):
+                    return True
+                back += 1
+            idx -= 1
+        return False
 
     @staticmethod
     def _starts_predicate_after_intro(words: List[W], punct_id: int) -> bool:
