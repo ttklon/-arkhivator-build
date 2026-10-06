@@ -39,6 +39,7 @@ class Cleaner:
         text = self._dehyphenate(text)
         text = self._remove_noise(text)
         text = self._fix_punct_runs(text)
+        text = self._normalize_chapter_headings(text)
         text = self._remove_footnote_marks(text)
         main, footnotes = self._split_footnotes(text)
         text = self._lists(main if (self.footnotes == "end" or not footnotes) else text)
@@ -117,6 +118,35 @@ class Cleaner:
             cleaned = [l for l in cleaned
                        if re.sub(r"\s+", " ", l).strip().lower() not in repeated]
         return "\n".join(cleaned)
+
+    @staticmethod
+    def _normalize_chapter_headings(text: str) -> str:
+        """Явные заголовки глав: «Глава 1. Вступление.» — даже с точкой
+        в конце и без пустой строки после.
+
+        Конвейер видит заголовок только как «короткая строка без знака
+        конца + пустая строка»; нормализуем вёрстку, чтобы разбивка
+        аудио на части (--chapters) срабатывала и в документах, где
+        заголовки набраны с точкой. Ссылки вида «Часть 2 ст. 158»
+        не трогаем — после номера идёт строчное слово.
+        """
+        rx = re.compile(r"^\s*(Глава|Часть|Раздел|Том)\s+"
+                        r"(?:[\d]+[.,]?[\d]*|[IVXLC]+)\s*"
+                        r"(?=$|(?-i:[А-ЯЁ]))", re.IGNORECASE)
+        lines = text.split("\n")
+        out = []
+        for i, ln in enumerate(lines):
+            if rx.match(ln) and len(ln.strip()) <= 80:
+                # точка после номера («Глава 1. Вступление») рвёт
+                # предложение: убираем и её, и конечную точку строки
+                ln = re.sub(r"([\dIVX]+)\.", r"\1", ln, count=1)
+                ln = re.sub(r"[.]\s*$", "", ln.rstrip())
+                out.append(ln)
+                if i + 1 < len(lines) and lines[i + 1].strip():
+                    out.append("")          # пустая строка после заголовка
+            else:
+                out.append(ln)
+        return "\n".join(out)
 
     @staticmethod
     def _fix_punct_runs(text: str) -> str:

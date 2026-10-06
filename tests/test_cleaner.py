@@ -124,3 +124,16 @@ def test_single_line_not_colontitle():
     # в многострочном тексте номера страниц по-прежнему выкидываются
     multi = "Текст документа.\n12\n13\nЕщё текст."
     assert c.clean(multi) == "Текст документа.\nЕщё текст."
+
+
+def test_chapter_headings_normalized():
+    """«Глава 1. Вступление.» (с точками, без пустой строки) — заголовок."""
+    from lektor.textproc.cleaner import Cleaner
+    from lektor.report import Report
+    c = Cleaner(Report())
+    out = c.clean("Глава 1. Вступление.\nТекст один.\nГлава 2. Итоги.\nТекст два.")
+    assert "Глава 1 Вступление\n\n" in out
+    assert "Глава 2 Итоги\n\n" in out
+    # ссылка «Часть 2 ст. 158» — не заголовок, не трогаем
+    out2 = c.clean("Часть 2 ст. 158 нарушена.")
+    assert out2 == "Часть 2 ст. 158 нарушена."
