@@ -999,7 +999,7 @@ def test_distributive_po():
     """Распределительное «по»: «по 3 дня» — «по три дня», а не «по трёх дня»."""
     n = TextNormalizer(Report("т"), expand_abbrevs=True)
     out = n.normalize_sentence("По 3 дня на каждого.")
-    assert "по три дня" in out
+    assert "по три дня" in out.lower()
     out = n.normalize_sentence("Выплатили по 100 рублей каждому.")
     assert "по сто рублей" in out
     # «по 1 дню» — дательный сохраняется
