@@ -220,9 +220,15 @@ def doctor() -> int:
     dep("lameenc (MP3)", "lameenc", "pip install lameenc")
 
     print("Форматы файлов (необязательные):")
-    dep("PyMuPDF (PDF)", "fitz", "pip install PyMuPDF", optional=True)
+    # PyMuPDF: старое имя fitz удалено в новых версиях — проверяем pymupdf
+    dep("PyMuPDF (PDF)", "pymupdf", "pip install PyMuPDF", optional=True)
     dep("python-docx (Word)", "docx", "pip install python-docx", optional=True)
     dep("BeautifulSoup (HTML/EPUB)", "bs4", "pip install beautifulsoup4", optional=True)
+
+    print("Интерфейс и запасной движок (необязательные):")
+    dep("customtkinter (окно программы)", "customtkinter",
+        "pip install customtkinter", optional=True)
+    dep("pyttsx3 (голоса Windows)", "pyttsx3", "pip install pyttsx3", optional=True)
 
     print("Словари:")
     from .config import APP_DIR, MODELS_DIR, OUTPUT_DIR, ensure_dirs
@@ -262,6 +268,18 @@ def doctor() -> int:
     else:
         print("  [НЕТ] модель не скачана — запустите install.bat")
         fails.append("запустите install.bat (скачает модель Silero)")
+
+    # свободное место: длинная книга — десятки МБ, кэш — до 500 МБ
+    try:
+        import shutil
+        free_mb = shutil.disk_usage(APP_DIR).free // (1024 * 1024)
+        if free_mb < 200:
+            print(f"  [ВНИМ] свободно всего {free_mb} МБ — для длинных книг "
+                  "и кэша может не хватить; освободите место")
+        else:
+            print(f"  [ ОК ] свободно {free_mb // 1024} ГБ на диске")
+    except Exception:
+        pass
 
     print("Проба ударений:")
     try:

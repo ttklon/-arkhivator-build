@@ -45,9 +45,18 @@ def test_pdf_scan_no_text_layer(tmp_path):
     import pytest
     from lektor.textproc.files import read_file
     try:
-        import fitz  # noqa
+        import pymupdf as fitz  # noqa
     except ImportError:
         pytest.skip("PyMuPDF не установлен")
+    # PyMuPDF 1.28 кэширует sys.stdout при импорте и падает в закрытый
+    # дескриптор под capsys — подменяем его буфер на вечный
+    try:
+        import sys
+        if getattr(fitz, "utils", None) is not None and \
+                hasattr(fitz, "_g_out_message"):
+            fitz._g_out_message = sys.stderr
+    except Exception:
+        pass
     doc = fitz.Document()
     doc.new_page()
     scan = tmp_path / "скан.pdf"
