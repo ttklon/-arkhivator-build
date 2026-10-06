@@ -34,8 +34,10 @@ class Cleaner:
         # ВНУТРИ тегов <...> кавычки не трогаем (SSML: time="700ms")
         text = self._fix_ascii_quotes(text)
         # интернет-тире: «слово -- слово» и «слово - слово» -> «слово — слово»
-        text = re.sub(r"\s--+\s", " — ", text)
-        text = re.sub(r"(?<=[а-яёА-ЯЁ»])\s-\s(?=[а-яёА-ЯЁ«])", " — ", text)
+        # только горизонтальные пробелы: «\s» ловил перенос строки и
+        # превращал дефис-маркер списка в тире, склеивая пункты
+        text = re.sub(r"[ \t]--+[ \t]", " — ", text)
+        text = re.sub(r"(?<=[а-яёА-ЯЁ»])[ \t]-[ \t](?=[а-яёА-ЯЁ«])", " — ", text)
         text = self._dehyphenate(text)
         text = self._remove_noise(text)
         text = self._fix_punct_runs(text)
@@ -98,8 +100,9 @@ class Cleaner:
             # номера страниц и служебные строки
             if not single and re.fullmatch(r"\d{1,4}([—–-]\d{1,4})?", s):
                 continue
-            if not single and re.fullmatch(r"(стр|ст|с)\.?\s*\d+( из \d+)?", s,
-                                           re.IGNORECASE):
+            if not single and re.fullmatch(
+                    r"(?:стр|ст|с|страница|страницы)\.?\s*\d+(?:\s*(?:из|of)\s*\d+)?",
+                    s, re.IGNORECASE):
                 continue
             if re.fullmatch(r"[—–\-_=•·.\s]+", s):
                 continue

@@ -147,3 +147,31 @@ def test_punct_runs_keep_mixed():
     out = c.clean("Отсрочка на 1 мес., всего 11 мес.")
     assert "мес.," in out and "мес." in out
     assert c.clean("Плохо!!! Совсем...") == "Плохо! Совсем."
+
+
+def test_dash_list_items_not_merged():
+    """Дефис-маркеры списка не превращаются в тире: пункты остаются
+    отдельными строками (раньше «\s» в правиле тире ловил перенос)."""
+    from lektor.config import load_settings
+    c = Cleaner(Report("т"), load_settings().footnotes)
+    out = c.clean("- первый пункт\n- второй пункт")
+    assert "первый пункт" in out and "второй пункт" in out
+    assert " — " not in out            # пункты не склеились тире
+    assert "\n" in out                 # границы пунктов сохранены
+
+
+def test_page_headers_removed():
+    """Колонтитулы «Страница N из M» отдельной строкой убираются."""
+    from lektor.config import load_settings
+    c = Cleaner(Report("т"), load_settings().footnotes)
+    out = c.clean("Страница 12 из 45\nОсновной текст.\nСтраница 13 из 45\n")
+    assert "Страница" not in out
+    assert "Основной текст." in out
+
+
+def test_inline_dash_still_tire():
+    """Интернет-тире внутри строки по-прежнему работает."""
+    from lektor.config import load_settings
+    c = Cleaner(Report("т"), load_settings().footnotes)
+    out = c.clean("слово - слово")
+    assert "слово — слово" in out
