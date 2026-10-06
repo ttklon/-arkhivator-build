@@ -131,13 +131,38 @@ class Settings:
 def load_settings() -> Settings:
     ensure_dirs()
     s = Settings()
+    defaults = Settings()
+    # диапазоны числовых полей: значение из файла клампится
+    ranges = {"speed": (0.5, 1.5), "pause_scale": (0.5, 2.0),
+              "inter_pause_scale": (0.5, 2.0),
+              "chatterbox_exaggeration": (0.0, 1.5),
+              "chatterbox_cfg_weight": (0.0, 1.0)}
     try:
         if os.path.exists(SETTINGS_PATH):
             with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
             for k, v in data.items():
-                if hasattr(s, k):
-                    setattr(s, k, v)
+                if not hasattr(s, k):
+                    continue
+                cur = getattr(s, k)
+                # тип значения должен совпадать с типом по умолчанию —
+                # иначе битый файл (speed="быстро") ронял интерфейс
+                if isinstance(cur, bool):
+                    if isinstance(v, bool):
+                        setattr(s, k, v)
+                elif isinstance(cur, float):
+                    if isinstance(v, (int, float)) and not isinstance(v, bool):
+                        lo, hi = ranges.get(k, (0.0, 100.0))
+                        setattr(s, k, max(lo, min(hi, float(v))))
+                elif isinstance(cur, int):
+                    if isinstance(v, int) and not isinstance(v, bool):
+                        setattr(s, k, v)
+                elif isinstance(cur, str):
+                    if isinstance(v, str):
+                        setattr(s, k, v)
+                elif isinstance(cur, list):
+                    if isinstance(v, list):
+                        setattr(s, k, v)
     except Exception:
         pass  # повреждённые настройки не должны ломать запуск
     return s
