@@ -328,6 +328,12 @@ class Pipeline:
 
         sentences = split_sentences(doc_text)
         total = max(1, len(sentences))
+        if not StressAssigner.accentor_loaded():
+            # первая загрузка silero-stress занимает ~10 с — говорим об
+            # этом, чтобы пауза не выглядела зависанием
+            self._stage(Stage.ANALYZE, 0.0,
+                        "загружаю нейросеть ударений (первый запуск — "
+                        "до 10 секунд, дальше мгновенно)")
         utterances: List[Utterance] = []
         markup_lines: List[str] = []
         in_footnotes = False

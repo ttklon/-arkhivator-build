@@ -261,6 +261,11 @@ class StressAssigner:
     _shared_acc_tried = False
     _shared_acc_lock = threading.Lock()
 
+    @classmethod
+    def accentor_loaded(cls) -> bool:
+        """Загружена ли нейросеть ударений (для честного прогресса)."""
+        return bool(cls._shared_acc_tried)
+
     def _get_accentor(self):
         """silero-stress: 4 млн слов, модели внутри pip-пакета, офлайн."""
         cls = StressAssigner

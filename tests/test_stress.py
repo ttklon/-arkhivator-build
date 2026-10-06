@@ -200,3 +200,11 @@ def test_half_amount_stress():
     assert "полумиллиард+е" in out
     assert "полут+ысячи" in out
     assert "полумилли+арде" not in out
+
+def test_accentor_loaded_flag():
+    """Флаг загрузки нейросети — для честного прогресса в GUI/CLI."""
+    from lektor.lingua.stress import StressAssigner
+    from lektor.report import Report
+    sa = StressAssigner(Report("t"))
+    sa.stress_sentence("Проверка флага загрузки.")
+    assert StressAssigner.accentor_loaded() is True
