@@ -28,7 +28,7 @@ def read_file(path: str) -> str:
     if ext in (".html", ".htm"):
         return _read_html(path)
     if ext == ".rtf":
-        return _read_txt(path)  # простая попытка; rtf встречается редко
+        return _read_rtf(path)
     # неизвестный формат — пробуем как текст
     return _read_txt(path)
 
@@ -50,6 +50,94 @@ def _read_txt(path: str) -> str:
         except Exception:
             continue
     return raw.decode("utf-8", errors="replace")
+
+
+_RTF_SKIP_GROUPS = {"fonttbl", "colortbl", "stylesheet", "info", "pict",
+                    "object", "generator", "themedata", "listtable",
+                    "listoverridetable", "rsidtbl", "latentstyles",
+                    "datastore", "xmlnstbl", "filetbl", "colorschememapping"}
+
+
+def _read_rtf(path: str) -> str:
+    """RTF (Word-эпоха, в юрархивах встречается): мини-парсер без зависимостей.
+
+    Старое поведение — «читать как текст» — озвучивало команды
+    («\\rtf1\\ansi\\fs24…»); теперь: \'XX (cp1251) и \\uNNNN — в буквы,
+    \\par — абзац, таблицы шрифтов/цветов/метаданные — вырезаются.
+    """
+    raw = _read_txt(path)
+    if not raw.lstrip().startswith("{"):
+        return raw                      # не RTF — читаем как есть
+    out = []
+    i, n = 0, len(raw)
+    while i < n:
+        ch = raw[i]
+        if ch == "{":
+            m = re.match(r"\{\\(?:\*\\)?([a-z]+)", raw[i:i + 40])
+            if m and m.group(1).lower() in _RTF_SKIP_GROUPS:
+                depth, j = 1, i + 1
+                while j < n and depth:
+                    if raw[j] == "{":
+                        depth += 1
+                    elif raw[j] == "}":
+                        depth -= 1
+                    j += 1
+                i = j
+                continue
+            i += 1
+        elif ch == "}":
+            i += 1
+        elif ch == "\\":
+            if raw[i:i + 2] == "\\'":
+                try:
+                    out.append(bytes([int(raw[i + 2:i + 4], 16)]).decode("cp1251"))
+                except Exception:
+                    pass
+                i += 4
+            elif raw[i:i + 2] == "\\u":
+                m = re.match(r"\\u(-?\d+)", raw[i:])
+                if m:
+                    out.append(chr(int(m.group(1)) & 0xFFFF))
+                    i += m.end()
+                    # за \uNNNN может следовать ?-заменитель и/или \'XX-фолбэк
+                    if i < n and raw[i] == "?":
+                        i += 1
+                    if raw[i:i + 2] == "\\'":
+                        i += 4
+                else:
+                    i += 2
+            else:
+                m = re.match(r"\\([a-z]+)(-?\d+)? ?", raw[i:], re.IGNORECASE)
+                if m:
+                    word = m.group(1).lower()
+                    if word in ("par", "line", "page", "sect", "pard"):
+                        out.append("\n")
+                    elif word == "tab":
+                        out.append(" ")
+                    elif word == "emdash":
+                        out.append("—")
+                    elif word == "endash":
+                        out.append("–")
+                    elif word == "lquote":
+                        out.append("«")
+                    elif word == "rquote":
+                        out.append("»")
+                    elif word == "ldblquote":
+                        out.append("«")
+                    elif word == "rdblquote":
+                        out.append("»")
+                    elif word == "_":
+                        out.append("-")
+                    i += m.end()
+                else:
+                    i += 1              # \\{\} — экранированные символы
+        else:
+            out.append(ch)
+            i += 1
+    text = "".join(out)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" ?\n ?", "\n", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 def _read_html(path: str) -> str:

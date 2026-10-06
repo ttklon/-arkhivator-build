@@ -155,7 +155,9 @@ class App(ctk.CTk):
         seg_theme.pack(fill="x", pady=(6, 0))
         seg_theme.set("Светлая" if self.settings.appearance == "light" else "Тёмная")
 
-        self.sl_speed = self._slider(right, "Скорость речи", 0.7, 1.3, self.settings.speed)
+        # диапазон как в CLI (кламп 0.5–1.5); сохранённое значение тоже клампим
+        self.sl_speed = self._slider(right, "Скорость речи", 0.5, 1.5,
+                                     max(0.5, min(1.5, self.settings.speed)))
         self.sl_intra = self._slider(right, "Паузы внутри предложения", 0.5, 2.0, self.settings.pause_scale)
         self.sl_inter = self._slider(right, "Паузы между предложениями", 0.5, 2.0, self.settings.inter_pause_scale)
 

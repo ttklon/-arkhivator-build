@@ -68,3 +68,25 @@ def test_ssml_broken_tags_survive():
     res2 = extract_ssml('<script>alert(1)</script> после тега.', r)
     # сам тег исчезает; содержимое тега остаётся текстом (не ломает конвейер)
     assert "после тега" in res2.text
+
+
+def test_read_rtf_strips_commands():
+    """RTF читается парсером: команды вырезаются, \\'XX и \\uNNNN — буквы."""
+    import os
+    import tempfile
+    from lektor.textproc.files import read_file
+    rtf = (r"{\rtf1\ansi\ansicpg1251{\fonttbl{\f0 Times;}}"
+        r"\par\b \u1055?\u1088?\u1080?\u1075?\u1086?\u1074?\u1086?\u1088;?\b0  "
+           r"\'e8\'e2\'e0\'ed \'c8\'e2\'e0\'ed \par"
+           r"\par \'d1\'f2\'e0\'f2\'fc\'ff 158 \\'d3\'ca.\par}")
+    with tempfile.NamedTemporaryFile(suffix=".rtf", delete=False, mode="w",
+                                     encoding="ascii") as tf:
+        tf.write(rtf)
+        tmp = tf.name
+    try:
+        out = read_file(tmp)
+        assert "rtf1" not in out and "fonttbl" not in out and "\\" not in out
+        assert "Приговор" in out and "иван" in out.lower()
+        assert "Статья 158 УК." in out
+    finally:
+        os.unlink(tmp)

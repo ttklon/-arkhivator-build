@@ -34,7 +34,7 @@ def main(argv=None) -> int:
     p.add_argument("--engine", choices=["silero", "chatterbox", "sapi"])
     p.add_argument("--voice", help="имя голоса (см. --list-voices)")
     p.add_argument("--mode", choices=["lecture", "document"], help="режим озвучки")
-    p.add_argument("--speed", type=float, help="0.7..1.3 — множитель темпа")
+    p.add_argument("--speed", type=float, help="0.5–1.5 — множитель темпа")
     p.add_argument("--format", choices=["mp3", "wav"])
     p.add_argument("--markup", action="store_true",
                    help="не синтезировать: показать разметку и отчёт")
