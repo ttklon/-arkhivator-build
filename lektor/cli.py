@@ -184,7 +184,11 @@ def main(argv=None) -> int:
                 except Exception:
                     pass
         return 0
-    print("Аудио не создано (проверьте текст и настройки).")
+    reason = getattr(res, "empty_reason", "")
+    if reason:
+        print(f"Аудио не создано: {reason}")
+    else:
+        print("Аудио не создано (отменено или текст пуст — проверьте текст).")
     return 3
 
 

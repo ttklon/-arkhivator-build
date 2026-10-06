@@ -48,6 +48,7 @@ class JobResult:
     engine: str = ""
     voice: str = ""
     failed: int = 0            # реплики, которые не удалось синтезировать
+    empty_reason: str = ""     # почему аудио нет (пустой текст, нет предложений, отмена)
 
 
 def build_backend(settings: Settings, log=print) -> Optional[Backend]:
@@ -131,6 +132,9 @@ class Pipeline:
         if not doc_text.strip():
             self.report.note("Текст пуст после очистки.")
             result.markup = ""
+            result.empty_reason = ("После очистки не осталось текста: "
+                                   "проверьте, что во вставке есть слова, "
+                                   "а не только знаки и служебные символы.")
             return result
 
         # 2) анализ
@@ -140,6 +144,9 @@ class Pipeline:
             return result
         if not utterances:
             self.report.note("Не нашлось ни одного предложения для озвучки.")
+            result.empty_reason = ("Не нашлось ни одного предложения "
+                                   "для озвучки — текст слишком короткий "
+                                   "или состоит из служебных строк.")
             return result
 
         # 3) синтез

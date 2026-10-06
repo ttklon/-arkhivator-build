@@ -874,7 +874,11 @@ class App(ctk.CTk):
                         messagebox.showerror("Лектор", err)
                         return
                     if res is None or not res.audio_path:
-                        self.lbl_status.configure(text="Отменено или пусто")
+                        reason = getattr(res, "empty_reason", "") if res else ""
+                        self.lbl_status.configure(
+                            text=reason or "Отменено или пусто")
+                        if reason:
+                            messagebox.showinfo("Лектор", reason)
                         return
                     self.progress.set(1.0)
                     from ..report import fmt_sec
