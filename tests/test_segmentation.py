@@ -135,3 +135,22 @@ def test_intro_phrase_pauses():
     assert any("не представил" in t for t in texts)
     # тесные группы не рвутся
     assert n_syn("Стороны подписали договор и исполнили его.") == 1
+
+
+def test_wh_questions_ik2():
+    """Специальные вопросы звучат ИК-2, общие без «ли» — ИК-3."""
+    from lektor.lingua.syntax import SyntaxAnalyzer
+    from lektor.lingua.intonation import IntonationPlanner
+    sa = SyntaxAnalyzer()
+    ip = IntonationPlanner()
+
+    def st(text):
+        return ip.classify_sentence(sa.analyze_sentence(text), "?")
+
+    assert st("Куда обратился истец за защитой прав?") == "IK2_wh_question"
+    assert st("Чем закончилось заседание?") == "IK2_wh_question"
+    assert st("Откуда поступила жалоба?") == "IK2_wh_question"
+    assert st("Чей это иск?") == "IK2_wh_question"
+    assert st("Сколько дней длился процесс?") == "IK2_wh_question"
+    assert st("Суд удовлетворил иск?") == "IK3_polar_question"
+    assert st("Был ли ответчик извещён?") == "IK3_polar_question"
