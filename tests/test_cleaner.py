@@ -175,3 +175,20 @@ def test_inline_dash_still_tire():
     c = Cleaner(Report("т"), load_settings().footnotes)
     out = c.clean("слово - слово")
     assert "слово — слово" in out
+
+
+def test_report_survives_flood(tmp_path):
+    """Отчёт не падает и не раздувается на десятках тысяч событий."""
+    from lektor.report import Report
+    r = Report("Стресс")
+    for i in range(12000):
+        r.comma_ignored("слово контекст " * 3, "причина")
+        r.number_normalized(f"число {i}", "чтение")
+        r.footnote("сноска", "")
+    r.finish(600.0, 120.0)
+    txt, js = r.save(str(tmp_path / "аудио"))
+    import os
+    assert os.path.getsize(txt) < 300 * 1024      # текст компактный
+    assert os.path.getsize(js) > 0                 # полный лог в JSON
+    body = open(txt, encoding="utf-8").read()
+    assert "и ещё" in body                         # лимит показа работает
