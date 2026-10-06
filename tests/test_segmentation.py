@@ -105,3 +105,33 @@ def test_initials_no_pause():
     inside = m.split("\n")[0]
     assert "И. И." in inside
     assert inside.count("520") == 1     # только в самом конце
+
+
+def test_intro_phrase_pauses():
+    """Вводные обороты в середине предложения паузятся с обеих сторон."""
+    from lektor.lingua.syntax import SyntaxAnalyzer
+    from lektor.lingua.segmentation import Segmenter
+    from lektor.report import Report
+    sa = SyntaxAnalyzer()
+    seg = Segmenter(Report("т"), fix_commas=True)
+
+    def n_syn(text):
+        return len(seg.segment(sa.analyze_sentence(text)))
+
+    # «по мнению суда» (parataxis) — 4 синтагмы: Во-первых | истец |
+    # по мнению суда | не представил
+    assert n_syn("Во-первых, истец, по мнению суда, не представил "
+                 "доказательств.") == 4
+    # «по общему правилу» (obl-оборот) — 3 синтагмы
+    assert n_syn("Решение, по общему правилу, может быть обжаловано.") == 3
+    # «в силу статьи 421 ГК» — 3 синтагмы
+    assert n_syn("Договор, в силу статьи 421 ГК, является свободным.") == 3
+    # запятая перед «не представил» не удаляется частицей «не»
+    words = sa.analyze_sentence("Истец, по мнению суда, не представил "
+                                "доказательств.")
+    segs = seg.segment(words)
+    texts = [s.text() if callable(getattr(s, "text", None)) else s.text
+             for s in segs]
+    assert any("не представил" in t for t in texts)
+    # тесные группы не рвутся
+    assert n_syn("Стороны подписали договор и исполнили его.") == 1

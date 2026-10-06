@@ -161,6 +161,14 @@ class Segmenter:
         if not self.fix_commas:
             return Boundary.WEAK, ""
 
+        # --- вводный оборот важнее «тесных групп» ----------------------
+        # obl-группа, окаймлённая запятыми, — это оборот, а не тесная
+        # группа («Решение, по общему правилу, может быть обжаловано»)
+        if prev is not None and prev.rel == "obl" and (
+                self._closes_parataxis(words, comma_id)
+                or self._closes_adp_intro(words, comma_id)):
+            return Boundary.MEDIUM, "после вводного оборота — нормативная пауза"
+
         # --- защита тесных групп (тр. 9) --------------------------------
         rel_names = {
             "obj": "глагол и дополнение", "iobj": "глагол и дополнение",
@@ -182,18 +190,29 @@ class Segmenter:
             return Boundary.NONE, "запятая оторвала предлог от его группы"
         if prev.pos == "VERB" and nxt.pos == "PRON" and nxt.case in ("accs", "gent"):
             return Boundary.NONE, f"запятая разорвала связь «глагол + дополнение» ({prev.text} {nxt.text})"
-        if prev.lemma in ("не", "ни") or nxt.lemma in ("не", "ни"):
-            return Boundary.NONE, "частица «не» не отрывается от своего слова"
         if prev.pos == "NUM" and nxt.pos == "NOUN":
             return Boundary.NONE, "запятая разорвала связь «числительное + существительное»"
 
         # --- места, где пауза уместна -----------------------------------
         if nxt.pos in ("VERB", "ADJ") and self._is_participle(nxt):
             return Boundary.MEDIUM, "причастный/деепричастный оборот — нормативная пауза"
+        # вводный оборот: запятая открывает/закрывает parataxis-поддерево
+        # («истец, по мнению суда, не представил» — пауза с обеих сторон)
+        if self._opens_parataxis(words, comma_id) \
+                or self._opens_adp_intro(words, comma_id):
+            return Boundary.MEDIUM, "перед вводным оборотом — нормативная пауза"
+        if self._closes_parataxis(words, comma_id) \
+                or self._closes_adp_intro(words, comma_id):
+            return Boundary.MEDIUM, "после вводного оборота — нормативная пауза"
         if nxt.lemma in SUBORD_CONJS or self._is_intro(nxt):
             return Boundary.MEDIUM, "перед подчинительным союзом или вводным словом"
         if self._is_intro_before(words, comma_id):
             return Boundary.MEDIUM, "после вводного слова или оборота — нормативная пауза"
+        # «не/ни» не отрывается от своего слова — но только если это
+        # действительно его частица, а не начало сказуемого после оборота
+        if (prev.lemma in ("не", "ни") or nxt.lemma in ("не", "ни")) \
+                and not self._starts_predicate_after_intro(words, comma_id):
+            return Boundary.NONE, "частица «не» не отрывается от своего слова"
         # синтаксическое дерево — самый надёжный признак однородности:
         # сосед по запятой связан rel=conj (падежные теги у неоднозначных
         # форм вроде «документы/справки/выписки» часто размечены случайно)
@@ -220,6 +239,140 @@ class Segmenter:
     def _is_participle(w: W) -> bool:
         p = analyze(w.text)
         return p is not None and p.tag is not None and p.tag.POS in ("PRTF", "PRTS", "GRND")
+
+    @staticmethod
+    def _syn_head_chain(words: List[W], w: W) -> list:
+        """Цепочка голов слова (id) до корня."""
+        chain = []
+        cur = w
+        seen = set()
+        while cur is not None and cur.id not in seen:
+            seen.add(cur.id)
+            chain.append(cur.id)
+            if cur.head < 0:
+                break
+            nxt = words[cur.head] if cur.head < len(words) else None
+            cur = nxt if (nxt is not None and not nxt.is_punct) else None
+        return chain
+
+    def _opens_parataxis(self, words: List[W], comma_id: int) -> bool:
+        """Запятая открывает вводный оборот: следующее слово принадлежит
+        parataxis-поддереву, а не главному сказуемому."""
+        nxt = self._near_word(words, comma_id, 1)
+        if nxt is None:
+            return False
+        chain = self._syn_head_chain(words, nxt)
+        # слово само parataxis или подчинено parataxis (кроме корня)
+        for wid in chain[:-1]:
+            w = words[wid]
+            if w.rel == "parataxis":
+                return True
+        return nxt.rel == "parataxis"
+
+    def _closes_parataxis(self, words: List[W], comma_id: int) -> bool:
+        """Запятая закрывает вводный оборот: предыдущее слово — в
+        parataxis-поддереве, следующее — вне его (возвращаемся к корню)."""
+        prev = self._near_word(words, comma_id, -1)
+        nxt = self._near_word(words, comma_id, 1)
+        if prev is None or nxt is None:
+            return False
+        pchain = self._syn_head_chain(words, prev)
+        nchain = self._syn_head_chain(words, nxt)
+        if pchain and pchain[-1] == prev.id and prev.head < 0:
+            return False
+        in_intro = any(words[wid].rel == "parataxis" for wid in pchain[:-1])             or prev.rel == "parataxis"
+        in_main = not any(words[wid].rel == "parataxis" for wid in nchain[:-1]) \
+            and nxt.rel != "parataxis"
+        return in_intro and in_main
+
+    @staticmethod
+    def _adp_intro_flank(words: List[W], comma_id: int, forward: bool) -> bool:
+        """«..., по общему правилу, может быть …» — группа с предлогом
+        между парой запятых, не содержащая корня, а за закрывающей
+        запятой — сказуемое. forward=True ищет открывающую запятую."""
+        # соседнее по направлению слово
+        w = None
+        idx = comma_id + (1 if forward else -1)
+        while 0 <= idx < len(words):
+            if words[idx].is_word:
+                w = words[idx]
+                break
+            if words[idx].text in {".", "!", "?", ";", ":"}:
+                return False
+            idx += (1 if forward else -1)
+        if w is None:
+            return False
+        if forward and w.pos != "ADP":
+            return False
+        # пройти группу до противоположной запятой
+        step = 1 if forward else -1
+        idx2 = comma_id + step
+        group = []
+        closing = None
+        while 0 <= idx2 < len(words):
+            t = words[idx2]
+            if t.is_punct and t.text == ",":
+                closing = idx2
+                break
+            if t.is_punct and t.text in {".", "!", "?", ";", ":"}:
+                return False
+            if t.is_word:
+                group.append(t)
+            idx2 += step
+        if closing is None or not group:
+            return False
+        # в группе не должно быть корня предложения
+        if any(g.head < 0 for g in group):
+            return False
+        # слово за закрывающей запятой (для forward) или перед
+        # открывающей (для backward) — сказуемое корня
+        anchor_idx = closing + (1 if forward else -1)
+        anchor = None
+        while 0 <= anchor_idx < len(words):
+            t = words[anchor_idx]
+            if t.is_word:
+                anchor = t
+                break
+            if t.text in {".", "!", "?", ";", ":"}:
+                break
+            anchor_idx += (1 if forward else -1)
+        if anchor is None:
+            return False
+        # anchor — root или зависит от root (не/быть/…)
+        cur = anchor
+        hops = 0
+        while cur is not None and hops < 4:
+            if cur.head < 0:
+                return cur.pos in ("VERB", "AUX", "ADJ")   # краткое причастие
+            cur = words[cur.head] if cur.head < len(words) else None
+            hops += 1
+        return False
+
+    def _opens_adp_intro(self, words: List[W], comma_id: int) -> bool:
+        return self._adp_intro_flank(words, comma_id, forward=True)
+
+    def _closes_adp_intro(self, words: List[W], comma_id: int) -> bool:
+        return self._adp_intro_flank(words, comma_id, forward=False)
+
+    @staticmethod
+    def _starts_predicate_after_intro(words: List[W], punct_id: int) -> bool:
+        """«…, не представил» после запятой — начало сказуемого, «не»
+        здесь не чья-то частица, и запятую удалять нельзя."""
+        idx = punct_id + 1
+        while idx < len(words) and not words[idx].is_word:
+            if words[idx].text in {".", "!", "?", ";", ":"}:
+                return False
+            idx += 1
+        w = words[idx] if idx < len(words) else None
+        if w is None or w.lemma not in ("не", "ни"):
+            return False
+        idx += 1
+        while idx < len(words) and not words[idx].is_word:
+            idx += 1
+        nxt = words[idx] if idx < len(words) else None
+        if nxt is None:
+            return False
+        return nxt.pos in ("VERB", "PRTF", "PRTS", "GRND", "INFN")
 
     @staticmethod
     def _is_intro_before(words: List[W], punct_id: int) -> bool:
