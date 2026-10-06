@@ -246,3 +246,23 @@ def test_cleaner_strips_markup_artifacts():
     c = Cleaner(Report("t"), load_settings().footnotes)
     out = c.clean("Прив+ет! ⟦240 мс⟧ Догов+ор подп+исан. 18+ и С++")
     assert out == "Привет! Договор подписан. 18+ и С++"
+
+
+def test_negation_be_past_stress_shift():
+    """«не был/было/были»: ударение переходит на «не» (слуховое правило
+    audiobook-ru). «была» сохраняет своё ударение."""
+    s = make()
+    assert "Н+е было" in s.stress_sentence("Не было денег.")
+    assert "н+е был" in s.stress_sentence("Иванов не был в городе.")
+    out = s.stress_sentence("Не была она там.")
+    assert "был+а" in out and "Н+е" not in out
+
+
+def test_concessive_stress_shift():
+    """«как бы то ни было»: ударение на «ни», глагол «быть» безударен;
+    «стало» перенос НЕ получает (на слух лучше со своим знаком)."""
+    s = make()
+    out = s.stress_sentence("Как бы то ни было, он пришёл.")
+    assert "н+и было" in out and "ни б+ыло" not in out
+    out2 = s.stress_sentence("Во что бы то ни стало.")
+    assert "ст+ало" in out2 and "н+и стало" not in out2

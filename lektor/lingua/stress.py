@@ -434,7 +434,7 @@ class StressAssigner:
             stressed = self._stress_word(t.text, low, following, preceding, base_form)
             pairs.append((t.text, stressed))
             prev_word = low
-        return pairs
+        return self._post_pairs_rules(pairs)
 
     def stress_sentence(self, sent_text: str) -> str:
         """Расставляет ударения в предложении, сохраняя пунктуацию и регистр."""
@@ -600,6 +600,55 @@ class StressAssigner:
         form = fix_case(form, original)
         form = glue_clitics(form)
         return form
+
+    # ------------------------------------------------------------------
+    def _post_pairs_rules(self, pairs: list) -> list:
+        """Слуховые правила по СОСЕДНИМ словам (проверены на слух в проекте
+        audiobook-ru, 2026-09-20):
+
+        1) Отрицание + «быть» в прошедшем: ударение переходит на «не» —
+           «н+е был», «н+е было», «н+е были» (пословная разметка даёт
+           «не б+ыло» — звучит как ошибка). Женский род «была» ударение
+           сохраняет, в правило не входит.
+        2) Уступительный оборот «бы (то) (там) ни было»: ударение
+           перетягивает «ни» — «как бы то н+и было», «верить чему бы
+           то н+и было». Только формы «быть»: «во что бы то ни
+           ст+ало» на слух лучше, чем «н+и стало» — перенос для
+           «стало» НЕ делаем.
+        """
+        BE_PAST = {"был", "было", "были"}
+
+        def plain(f: str) -> str:
+            return f.replace("+", "").lower()
+
+        def mark(word: str, cap: str) -> str:
+            stressed = place_stress(word.lower(), 0) or word.lower()
+            if cap[:1].isupper():
+                stressed = stressed[0].upper() + stressed[1:]
+            return stressed
+
+        out = list(pairs)
+        for i in range(len(out) - 1):
+            tok, form = out[i]
+            nxt_tok, nxt_form = out[i + 1]
+            # 1) «не был/было/были» -> «н+е был/было/были»
+            if plain(form) == "не" and plain(nxt_form) in BE_PAST:
+                if "+" in nxt_form:
+                    out[i] = (tok, mark("не", tok))
+                    out[i + 1] = (nxt_tok, nxt_form.replace("+", ""))
+                    continue
+            # 2) «бы (то)? (там)? ни был/было/были» -> «н+и ...»
+            if plain(form) == "ни" and "+" not in form and i >= 1:
+                j = i - 1
+                window = []
+                while j >= 0 and plain(out[j][1]) in {"бы", "то", "там"}:
+                    window.insert(0, plain(out[j][1]))
+                    j -= 1
+                if window and window[0] == "бы" \
+                        and plain(nxt_form) in BE_PAST and "+" in nxt_form:
+                    out[i] = (tok, mark("ни", tok))
+                    out[i + 1] = (nxt_tok, nxt_form.replace("+", ""))
+        return out
 
     # ------------------------------------------------------------------
     def _homograph_rule(self, low: str, word: str, following: list,
