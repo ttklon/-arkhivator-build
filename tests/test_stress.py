@@ -208,3 +208,41 @@ def test_accentor_loaded_flag():
     sa = StressAssigner(Report("t"))
     sa.stress_sentence("Проверка флага загрузки.")
     assert StressAssigner.accentor_loaded() is True
+
+
+def test_user_stress_marks_stripped():
+    """Копия из окна «Разметка» (слова с «+») — разметка снимается и
+    расставляется заново, идемпотентно, без мусора и дублей."""
+    s = make()
+    clean = s.stress_sentence("Привет, как дела?")
+    assert s.stress_sentence("Прив+ет, как дел+а?") == clean
+    assert s.stress_sentence("Прив++ет") == clean.split(",")[0] or \
+        s.stress_sentence("Прив++ет").count("+") == 1
+    # «+»-мусор между буквами тоже нормализуется
+    out = s.stress_sentence("П+р+и+в+е+т")
+    assert "+" not in out or out.count("+") == 1
+
+
+def test_user_stress_spares_non_accents():
+    """«18+», «+7 926», «С++» — плюс не перед буквой, не снимается."""
+    from lektor.lingua.stress import strip_user_stress
+    assert strip_user_stress("18+ лет, +7 926, С++") == "18+ лет, +7 926, С++"
+    assert strip_user_stress("Догов+ор") == "Договор"
+
+
+def test_compound_yo_single_stress():
+    """Сложное слово с двумя «ё»: знак ОДИН, перед последней «ё»
+    (двойное ударение «тр+ёхкол+ёсный» Silero читает криво)."""
+    s = make()
+    out = s.stress_sentence("трёхколёсный")
+    assert out == "трёхкол+ёсный"
+
+
+def test_cleaner_strips_markup_artifacts():
+    """⟦N мс⟧ и готовая разметка «+» из окна «Разметка» не читаются вслух."""
+    from lektor.config import load_settings
+    from lektor.report import Report
+    from lektor.textproc.cleaner import Cleaner
+    c = Cleaner(Report("t"), load_settings().footnotes)
+    out = c.clean("Прив+ет! ⟦240 мс⟧ Догов+ор подп+исан. 18+ и С++")
+    assert out == "Привет! Договор подписан. 18+ и С++"

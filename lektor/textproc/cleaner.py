@@ -12,6 +12,8 @@ import re
 from collections import Counter
 from typing import List, Tuple
 
+from ..lingua.stress import strip_user_stress
+
 from ..report import Report
 
 SUPERSCRIPTS = "¹²³⁴⁵⁶⁷⁸⁹⁰⁺"
@@ -38,6 +40,13 @@ class Cleaner:
         # превращал дефис-маркер списка в тире, склеивая пункты
         text = re.sub(r"[ \t]--+[ \t]", " — ", text)
         text = re.sub(r"(?<=[а-яёА-ЯЁ»])[ \t]-[ \t](?=[а-яёА-ЯЁ«])", " — ", text)
+        # артефакты окна «Разметка» (⟦240 мс⟧) при копировании назад
+        # в поле ввода не должны читаться вслух
+        text = re.sub(r"⟦\d+(?:[.,]\d+)?\s*мс⟧", " ", text)
+        # снятие УЖЕ расставленных ударений «+» (копия из окна «Разметка»
+        # или чужой туториал): иначе токен «+» и обрубки слов ломают
+        # разбор предложений и сегментацию. «18+», «+7…», «С++» целы.
+        text = strip_user_stress(text)
         text = self._dehyphenate(text)
         text = self._remove_noise(text)
         text = self._fix_punct_runs(text)

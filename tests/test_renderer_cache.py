@@ -50,3 +50,15 @@ def test_jobresult_has_failed():
     """Поле failed есть и по умолчанию 0 (частичные провалы видимы)."""
     r = JobResult()
     assert r.failed == 0
+
+
+def test_ssml_no_leading_break():
+    """Ведущий <break> убран: он добавлял мёртвую тишину в начало файла."""
+    from lektor.synthesis.backends import Segment, Utterance
+    from lektor.synthesis.silero_backend import SileroBackend
+    be = object.__new__(SileroBackend)
+    seg = Segment(text="Договор подписан сторонами.", pause_after_ms=0)
+    utt = Utterance(segments=[seg])
+    ssml = be._build_ssml(utt, ["Догов+ор подп+исан сторон+ами."])
+    assert ssml.startswith("<speak><s>")
+    assert "break" not in ssml.split("</s>")[0]

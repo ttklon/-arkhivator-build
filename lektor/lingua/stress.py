@@ -145,6 +145,18 @@ def mark_yo(word: str) -> str:
     return word[:i] + "+" + word[i:]
 
 
+def strip_extra_stress(word: str) -> str:
+    """Один знак ударения на слово: лишние снимаем, оставляем последний
+    (в слове бывает только одно словесное ударение)."""
+    if word.count("+") <= 1:
+        return word
+    plain = word.replace("+", "")
+    idx = word.rfind("+")             # какой по счёту гласной был последний знак
+    n = sum(ch in VOWELS for ch in word[:idx].lower())
+    out = place_stress(plain, n)
+    return out if out is not None else plain
+
+
 def transfer_stress(template_stressed: str, word: str) -> Optional[str]:
     """Переносит ударение с образца на другую форму слова (по номеру гласной).
 
@@ -159,6 +171,20 @@ def transfer_stress(template_stressed: str, word: str) -> Optional[str]:
 def strip_stress(text: str) -> str:
     """Убирает разметку ударений (для движков, которые её не понимают)."""
     return text.replace("+", "")
+
+
+STRESS_MARK_RE = re.compile(r"\++(?=[А-ЯЁа-яёA-Za-z])")
+
+
+def strip_user_stress(text: str) -> str:
+    """Снимает УЖЕ РАССТАВЛЕННУЮ разметку «+» из вставленного текста.
+
+    Типичный сценарий: юзер скопировал текст из окна «Разметка» (там
+    слова с «+») обратно в поле ввода — без снятия наша разметка
+    наложилась бы поверх: «Пр+ив++ет» читается мусором.
+    «18+», «+7 926…», «С++» не трогаем: их плюс не перед буквой.
+    """
+    return STRESS_MARK_RE.sub("", text)
 
 
 def glue_clitics(text: str) -> str:
@@ -360,8 +386,11 @@ class StressAssigner:
         """Пары (исходный_токен, форма_для_синтеза) для каждого токена.
 
         ГАРАНТИЯ: каждое слово с 2+ гласными получает «+» (модель v5_cis_base
-        безударные слова читает кашей).
+        безударные слова читает кашей). Уже расставленная разметка во
+        входном тексте (копия из окна «Разметка») снимается — иначе
+        наложение даёт «Пр+ив++ет».
         """
+        sent_text = strip_user_stress(sent_text)
         tokens = split_tokens(sent_text)
         if not tokens:
             return []
@@ -409,6 +438,7 @@ class StressAssigner:
 
     def stress_sentence(self, sent_text: str) -> str:
         """Расставляет ударения в предложении, сохраняя пунктуацию и регистр."""
+        sent_text = strip_user_stress(sent_text)   # копия из окна «Разметка»
         tokens = split_tokens(sent_text)
         pairs = self.stress_tokens(sent_text)
         if not pairs:
@@ -553,10 +583,20 @@ class StressAssigner:
         """Пост-проверки: «ё» обязана иметь знак; клитики склеиваются."""
         low = form.lower()
         if "ё" in low:
-            # знак должен стоять перед последней «ё»
-            i = low.rfind("ё")
-            if i == 0 or form[i - 1] != "+":
-                form = mark_yo(strip_stress(form))
+            # в части слова с «ё» знак должен быть ОДИН и стоять перед
+            # последней «ё» (два знака — «тр+ёхкол+ёсный» — Silero читает
+            # с двойным ударением; дефисные части обрабатываем отдельно)
+            fixed = []
+            for part in form.split("-"):
+                pl = part.lower()
+                if "ё" in pl:
+                    i = pl.rfind("ё")
+                    if part.count("+") != 1 or i == 0 or part[i - 1] != "+":
+                        part = mark_yo(strip_stress(part))
+                elif part.count("+") > 1:
+                    part = strip_extra_stress(part)
+                fixed.append(part)
+            form = "-".join(fixed)
         form = fix_case(form, original)
         form = glue_clitics(form)
         return form

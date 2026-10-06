@@ -321,8 +321,13 @@ class SileroBackend(Backend):
 
     # ------------------------------------------------------------------
     def _build_ssml(self, utterance: Utterance, texts: List[str]) -> str:
-        """SSML для Silero v5: разгон, паузы-брейки, просодия (тр. 11, 21)."""
-        parts = ['<speak><break time="300ms"/>']
+        """SSML для Silero v5: паузы-брейки, просодия (тр. 11, 21).
+
+        Ведущий <break> УБРАН: он добавлял 0,3 с мёртвой тишины в начало
+        каждого файла — при склейке фраз каждое предложение начиналось
+        с затычки. Межфразовую паузу пишет renderer (pause_after_ms).
+        """
+        parts = ["<speak>"]
         segs = utterance.segments
         for i, (seg, text) in enumerate(zip(segs, texts)):
             inner = escape(text)
