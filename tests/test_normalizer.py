@@ -976,7 +976,7 @@ def test_ordinal_e_plural():
     c = Cleaner(Report("т"), load_settings().footnotes)
     out = n.normalize_sentence(c.clean("В 90-е годы практика изменилась."))
     assert "девяностые" in out
-    out = n.normalize_sentence(c.clean("Экономика 2000-х и 2010-е отличается."))
+    out = n.normalize_sentence(c.clean("Экономика 2000-х и 2010-е отличаются."))
     assert "двухтысячных" in out and "десятые" in out
     # но «2-е издание» — единственное среднее
     out = n.normalize_sentence(c.clean("Это 2-е издание."))
