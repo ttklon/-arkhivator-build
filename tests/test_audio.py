@@ -161,3 +161,21 @@ def test_mp3_id3_tags(tmp_path):
     # кириллица в заголовке (UTF-16)
     assert "Лекция о договоре".encode("utf-16") in data
     assert b"TIT2" in data and b"TPE1" in data
+
+
+def test_prune_cache(tmp_path, monkeypatch):
+    """Кэш синтеза не растёт бесконечно: самые старые файлы удаляются."""
+    import os
+    import time
+    from lektor.synthesis import renderer
+    monkeypatch.setattr(renderer, "CACHE_DIR", str(tmp_path))
+    for i in range(4):
+        p = tmp_path / f"old{i}.npy"
+        p.write_bytes(b"x" * 100)          # 4 x 100 байт
+        ts = time.time() - 86400 * (10 - i)  # чем меньше i, тем старше
+        os.utime(p, (ts, ts))
+    removed = renderer.prune_cache(0.0002)   # лимит ~200 байт
+    files = list(tmp_path.glob("old*.npy"))
+    assert removed == 2 and len(files) == 2
+    # самые СТАРЫЕ удалены
+    assert all(f.stat().st_mtime > time.time() - 86400 * 9 for f in files)

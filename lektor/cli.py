@@ -18,6 +18,13 @@ from .config import load_settings, save_settings, Settings, OUTPUT_DIR
 
 
 def main(argv=None) -> int:
+    # тихая чистка кэша синтеза (при превышении лимита уходят самые старые)
+    try:
+        from .synthesis.renderer import prune_cache
+        prune_cache()
+    except Exception:
+        pass
+
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 

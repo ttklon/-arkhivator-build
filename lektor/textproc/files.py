@@ -175,13 +175,33 @@ def _read_docx(path: str) -> str:
     except Exception:
         raise RuntimeError("файл повреждён или не является документом Word (.docx); "
                            "для старого формата .doc пересохраните как .docx или .txt")
-    parts = [p.text for p in d.paragraphs if p.text and p.text.strip()]
-    # таблицы тоже содержат важный текст
-    for table in d.tables:
+    parts = []
+
+    def add_table(table):
+        # ячейки строки — через тире, строки — абзацами
         for row in table.rows:
             cells = [c.text.strip() for c in row.cells if c.text.strip()]
             if cells:
                 parts.append(" — ".join(cells))
+
+    # абзацы и таблицы в ИСХОДНОМ порядке (w:p и w:tbl чередуются в теле
+    # документа); раньше таблицы выпадали в конец текста
+    try:
+        from docx.oxml.ns import qn
+        from docx.table import Table as _Table
+        from docx.text.paragraph import Paragraph as _Par
+        for child in d.element.body.iterchildren():
+            if child.tag == qn("w:p"):
+                t = _Par(child, d).text
+                if t and t.strip():
+                    parts.append(t)
+            elif child.tag == qn("w:tbl"):
+                add_table(_Table(child, d))
+    except Exception:
+        # запасной путь для экзотических структур — как раньше
+        parts = [p.text for p in d.paragraphs if p.text and p.text.strip()]
+        for table in d.tables:
+            add_table(table)
     return "\n\n".join(parts)
 
 

@@ -728,6 +728,12 @@ class App(ctk.CTk):
 
 
 def main() -> int:
+    # тихая чистка кэша синтеза (при превышении лимита уходят самые старые)
+    try:
+        from ..synthesis.renderer import prune_cache
+        prune_cache()
+    except Exception:
+        pass
     ensure_dirs()
     app = App()
     app.mainloop()

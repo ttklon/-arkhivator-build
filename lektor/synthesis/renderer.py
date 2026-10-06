@@ -19,6 +19,41 @@ from .audio import (WavWriter, normalize_rms, peak_normalize, silence,
 from .backends import Utterance
 
 
+def prune_cache(max_mb: float = 500.0) -> int:
+    """Удаляет самые старые файлы кэша синтеза, пока суммарный размер
+    больше max_mb МБ. Возвращает число удалённых файлов.
+
+    Кэш ускоряет повторные сборки, но без ограничений растёт годами;
+    чистим тихо, при запуске приложения.
+    """
+    if not os.path.isdir(CACHE_DIR):
+        return 0
+    files = []
+    total = 0
+    for name in os.listdir(CACHE_DIR):
+        p = os.path.join(CACHE_DIR, name)
+        try:
+            st = os.stat(p)
+            files.append((st.st_mtime, st.st_size, p))
+            total += st.st_size
+        except OSError:
+            continue
+    if total <= max_mb * 1e6:
+        return 0
+    files.sort()                      # самые старые — первыми
+    removed = 0
+    for _, size, p in files:
+        if total <= max_mb * 1e6:
+            break
+        try:
+            os.unlink(p)
+            total -= size
+            removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 class Renderer:
     def __init__(self, backend, voice: str, speed: float = 1.0,
                  inter_pause_scale: float = 1.0,

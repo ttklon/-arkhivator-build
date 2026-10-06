@@ -90,3 +90,26 @@ def test_read_rtf_strips_commands():
         assert "Статья 158 УК." in out
     finally:
         os.unlink(tmp)
+
+
+def test_docx_table_order():
+    """Таблица в docx читается на своём месте, а не выпадает в конец."""
+    import os
+    import tempfile
+    from lektor.textproc.files import read_file
+    from docx import Document
+    d = Document()
+    d.add_paragraph("Первый абзац.")
+    t = d.add_table(rows=1, cols=2)
+    t.rows[0].cells[0].text = "Ячейка А"
+    t.rows[0].cells[1].text = "Ячейка Б"
+    d.add_paragraph("Последний абзац.")
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tf:
+        d.save(tf.name)
+        tmp = tf.name
+    try:
+        out = read_file(tmp)
+        first = out.find("Ячейка А")
+        assert 0 <= out.find("Первый") < first < out.find("Последний")
+    finally:
+        os.unlink(tmp)
