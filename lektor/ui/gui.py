@@ -616,7 +616,14 @@ class App(ctk.CTk):
     def _update_count(self):
         text = self.txt.get("1.0", "end")
         words = len([w for w in text.split() if any(c.isalpha() for c in w)])
-        self.lbl_count.configure(text=f"слов: {words}")
+        # оценка длительности с паузами: юридический текст ~73 слов/мин,
+        # простой ~108; берём консервативные 85 (лучше предупредить)
+        if words:
+            mins = words / 85.0
+            eta = f"~{int(mins)} мин" if mins >= 1 else f"~{int(mins * 60)} с"
+            self.lbl_count.configure(text=f"слов: {words} · озвучка {eta}")
+        else:
+            self.lbl_count.configure(text="слов: 0")
 
     def _log(self, msg: str):
         self.log.insert("end", msg + "\n")
