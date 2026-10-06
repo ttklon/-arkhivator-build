@@ -224,11 +224,26 @@ class TextNormalizer:
         text = self._dot_dates(text)         # 12.03.2021 -> «двенадцатого марта …»
         text = self._dates(text)             # 27 июля 2006 года, в 2006 году
         text = self._amounts(text)           # 5 млн, 2 тыс. (согласование)
+        # «36 мес.» -> «тридцать шесть месяцев» (до _measures: его точка
+        # сокращения иначе съедается как конец фразы)
+        def mes_repl(m):
+            n = int(m.group(1))
+            if n > 1000:
+                return m.group(0)
+            words = numerals.cardinal_words(n) + [self._plural_unit(
+                n, ("месяц", "месяца", "месяцев"))]
+            self.report.number_normalized(m.group(0), " ".join(words))
+            return " " + " ".join(words) + " "
+        text = re.sub(r"(?<![\d.])(\d{1,4})\s*мес\.(?![а-яёА-ЯЁ])",
+                      mes_repl, text)
         text = self._measures(text)          # 5 кг, 60 км/ч, 100 м², −5 °C
         text = self._money_time_percent(text)
         text = self._half_units(text)        # 0,5 часа -> «полчаса»
         text = self._numbers(text)           # остальные числа с согласованием
         text = self._abbreviations(text)     # УК РФ и пр. (тр. 7, 23)
+        # «руб./мес.» -> «рублей в месяц»; «шт./мес.» — тоже
+        text = re.sub(r"(?<=[а-яёА-ЯЁ])\s*/\s*мес\.?(?![а-яёА-ЯЁ])",
+                      " в месяц ", text)
         text = re.sub(r"\s+([.,;:!?…])", r"\1", text)
         text = re.sub(r"«\s+", "«", text)
         text = re.sub(r"\s+»", "»", text)

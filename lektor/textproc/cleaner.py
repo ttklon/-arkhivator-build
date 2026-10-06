@@ -152,7 +152,10 @@ class Cleaner:
     def _fix_punct_runs(text: str) -> str:
         text = re.sub(r"([!])\1+", r"\1", text)
         text = re.sub(r"([?])\1+", r"\1", text)
-        text = re.sub(r"([.,;:])([.,;:])+", r"\1", text)
+        # повтор ОДНОГО знака («...», «!!!» -> один); смесь «.,» (точка-
+        # запятая после сокращения: «мес.,», «г.,») — сохраняем: раньше
+        # запятая терялась и фраза меняла смысл
+        text = re.sub(r"([.,;:])\1+", r"\1", text)
         text = re.sub(r"[ \t]+", " ", text)
         return re.sub(r"\n{3,}", "\n\n", text)
 

@@ -926,3 +926,14 @@ def test_io_zam_zp():
     assert n.normalize_sentence("Зам. прокурора подал.").lower().startswith("заместитель")
     assert "заместителя" in n.normalize_sentence("У зам. министра изъято.")
     assert "зарплата" in n.normalize_sentence("Выплатить з/п за год.")
+
+
+def test_mes_and_rub_per_mes():
+    """«36 мес.» — месяцев (согласование); «руб./мес.» — рублей в месяц."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    out = n.normalize_sentence("Отсрочка на 1 мес., продление 2 мес., всего 11 мес.")
+    assert "один месяц" in out and "два месяца" in out and "одиннадцать месяцев" in out
+    out2 = n.normalize_sentence("Платёж 25 000 руб./мес.")
+    assert "рублей в месяц" in out2 and "/" not in out2

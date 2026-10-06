@@ -137,3 +137,13 @@ def test_chapter_headings_normalized():
     # ссылка «Часть 2 ст. 158» — не заголовок, не трогаем
     out2 = c.clean("Часть 2 ст. 158 нарушена.")
     assert out2 == "Часть 2 ст. 158 нарушена."
+
+
+def test_punct_runs_keep_mixed():
+    """«мес.,» — запятая после точки не теряется; «!!!» -> «!»."""
+    from lektor.textproc.cleaner import Cleaner
+    from lektor.report import Report
+    c = Cleaner(Report())
+    out = c.clean("Отсрочка на 1 мес., всего 11 мес.")
+    assert "мес.," in out and "мес." in out
+    assert c.clean("Плохо!!! Совсем...") == "Плохо! Совсем."
