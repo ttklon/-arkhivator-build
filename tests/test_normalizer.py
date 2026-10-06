@@ -993,3 +993,21 @@ def test_ps_and_common_eras():
     assert "постскриптум" in out
     out = n.normalize_sentence(c.clean("События V века до н.э. описаны."))
     assert "до нашей эры" in out
+
+
+def test_distributive_po():
+    """Распределительное «по»: «по 3 дня» — «по три дня», а не «по трёх дня»."""
+    n = TextNormalizer(Report("т"), expand_abbrevs=True)
+    out = n.normalize_sentence("По 3 дня на каждого.")
+    assert "по три дня" in out
+    out = n.normalize_sentence("Выплатили по 100 рублей каждому.")
+    assert "по сто рублей" in out
+    # «по 1 дню» — дательный сохраняется
+    out = n.normalize_sentence("Выдали по 1 дню отпуска.")
+    assert "по одному дню" in out
+    # не распределительное: дательный цел
+    out = n.normalize_sentence("Движение по 5 полосам.")
+    assert "по пяти полосам" in out
+    # «по истечении» — родительный цел
+    out = n.normalize_sentence("По истечении 30 суток договор расторгается.")
+    assert "тридцати суток" in out

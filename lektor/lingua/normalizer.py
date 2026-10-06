@@ -1594,6 +1594,11 @@ class TextNormalizer:
                         # но «на 5 страницах» -> «на пяти страницах»
                         if case == "gent" and prev_word in self._ACCS_PREPS:
                             case = "nomn"
+                        # распределительное «по»: «по 3 дня на каждого» ->
+                        # «по три дня» (сущ. в родительном, как при счёте);
+                        # «по 5 полосам» — дательный, это не распределение
+                        if case == "gent" and prev_word == "по":
+                            case = "nomn"
                         break
                     if tok.text in {",", ".", ";"}:
                         break
