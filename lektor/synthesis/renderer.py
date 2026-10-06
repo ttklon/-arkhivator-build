@@ -76,7 +76,10 @@ class Renderer:
 
     # ------------------------------------------------------------------
     def _cache_key(self, utt: Utterance) -> str:
-        parts = [self.backend.id, self.voice, f"{self.sample_rate}"]
+        # версия модели входит в ключ: реплики v4_ru не должны
+        # подсунуться при смене модели на v5_cis_base (id движка тот же)
+        model_tag = str(getattr(self.backend, "preferred", "") or "")
+        parts = [self.backend.id, model_tag, self.voice, f"{self.sample_rate}"]
         for sg in utt.segments:
             parts.append("|".join([sg.text, str(sg.pause_after_ms),
                                    str(sg.rate), str(sg.pitch),

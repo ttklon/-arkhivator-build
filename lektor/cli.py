@@ -170,6 +170,9 @@ def main(argv=None) -> int:
             print(f"Движок: {res.engine}; голос: {res.voice}; "
                   f"аудио {fmt_sec(res.duration_sec)}")
             print(f"Отчёт: {res.report.summary_line()}")
+            if getattr(res, "failed", 0):
+                print(f"ВНИМАНИЕ: не синтезировано реплик: {res.failed} "
+                      "(в аудио на их месте паузы; детали — в отчёте).")
         if a.open:
             folder = os.path.dirname(os.path.abspath(res.audio_path))
             try:

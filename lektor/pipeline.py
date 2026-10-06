@@ -47,6 +47,7 @@ class JobResult:
     markup: str = ""
     engine: str = ""
     voice: str = ""
+    failed: int = 0            # реплики, которые не удалось синтезировать
 
 
 def build_backend(settings: Settings, log=print) -> Optional[Backend]:
@@ -217,6 +218,10 @@ class Pipeline:
                              cache_dir=CACHE_DIR if self.cache else None,
                              meta=meta_part)
                 duration += r.render(group, chapter_file)
+                # статистика частей (провалы/кэш) не должна теряться
+                renderer.failed += getattr(r, "failed", 0)
+                renderer.cache_hits += getattr(r, "cache_hits", 0)
+                renderer.cache_misses += getattr(r, "cache_misses", 0)
                 done_before += len(group)
                 out_files.append(chapter_file)
                 if self._cancelled():
@@ -234,6 +239,7 @@ class Pipeline:
             result.audio_paths = out_files
             result.duration_sec = duration
             result.markup = markup
+            result.failed = renderer.failed
             self.report.stats["глав"] = len(out_files)
             self.report.stats["длительность_аудио_сек"] = round(duration, 1)
             self.report.stats["время_сборки_сек"] = round(time.time() - t0, 1)
@@ -265,6 +271,7 @@ class Pipeline:
         result.audio_path = out_path
         result.duration_sec = duration
         result.markup = markup
+        result.failed = renderer.failed
 
         if getattr(renderer, "failed", 0):
             self.report.note(

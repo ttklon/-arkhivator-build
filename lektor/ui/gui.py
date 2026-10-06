@@ -629,6 +629,8 @@ class App(ctk.CTk):
         settings = self._collect_settings()
         engine = self._current_engine()
         voice = self._current_voice_id()
+        if engine == ENGINE_SILERO and not self._model_guard():
+            return
         self.lbl_status.configure(text="Готовлю пробу голоса…")
 
         def work():
@@ -673,6 +675,27 @@ class App(ctk.CTk):
     # ==================================================================
     # Основная работа
     # ==================================================================
+    def _model_guard(self) -> bool:
+        """Предпроверка: без модели Silero озвучка невозможна.
+
+        Сообщаем сразу и предлагаем скачать — вместо минут сетевых
+        таймаутов внутри сборки. Возвращает True, если можно продолжать.
+        """
+        from ..synthesis.silero_backend import SileroBackend
+        b = SileroBackend()
+        if b.model_ready():
+            return True
+        if messagebox.askyesno(
+                "Лектор",
+                "Модель голоса Silero ещё не скачана — озвучить текст "
+                "без неё невозможно.\n\nСкачать сейчас (~60 МБ, нужен "
+                "интернет один раз)?"):
+            self.download_model_flow()
+        else:
+            self.lbl_status.configure(
+                text="Остановлено: нет модели голоса. Нажмите «Скачать модель» ниже.")
+        return False
+
     def start_job(self):
         text = self.txt.get("1.0", "end").strip()
         if not text:
@@ -681,22 +704,8 @@ class App(ctk.CTk):
         if self._worker and self._worker.is_alive():
             return
         settings = self._collect_settings()
-        # предпроверка: без модели голоса Silero озвучка невозможна —
-        # сообщаем сразу, а не после минут сетевых таймаутов
-        if settings.engine == ENGINE_SILERO:
-            from ..synthesis.silero_backend import SileroBackend
-            b = SileroBackend()
-            if not b.model_ready():
-                if messagebox.askyesno(
-                        "Лектор",
-                        "Модель голоса Silero ещё не скачана — озвучить текст "
-                        "без неё невозможно.\n\nСкачать сейчас (~60 МБ, нужен "
-                        "интернет один раз)?"):
-                    self.download_model_flow()
-                else:
-                    self.lbl_status.configure(
-                        text="Остановлено: нет модели голоса. Нажмите «Скачать модель» ниже.")
-                return
+        if not self._model_guard():
+            return
         self._cancel.clear()
         self.btn_go.configure(state="disabled")
         self.btn_cancel.configure(state="normal")
@@ -751,6 +760,8 @@ class App(ctk.CTk):
                 " Отмена — по кнопке «Отменить» (текущий файл будет дочитан)."):
             return
         settings = self._collect_settings()
+        if not self._model_guard():
+            return
         self._cancel.clear()
         self.btn_go.configure(state="disabled")
         self.btn_cancel.configure(state="normal")
@@ -870,6 +881,18 @@ class App(ctk.CTk):
                     mins = fmt_sec(res.duration_sec)
                     self.lbl_status.configure(
                         text=f"Готово! {mins} аудио · {res.report.summary_line()}")
+                    if getattr(res, "failed", 0):
+                        n = res.failed
+                        self.lbl_status.configure(
+                            text=f"Готово с пропусками: {n} реплик не "
+                                 f"синтезировано (на их месте паузы)")
+                        self._log(f"ВНИМАНИЕ: не синтезировано реплик: {n}")
+                        messagebox.showwarning(
+                            "Лектор",
+                            f"Аудио готово, но {n} реплик(а) не удалось "
+                            "синтезировать — на их месте паузы.\n\n"
+                            "Нажмите «Диагностика» внизу окна: обычно причина "
+                            "в памяти или в конкретных символах текста.")
                     if getattr(res, "audio_paths", None):
                         self._log(f"Глав: {len(res.audio_paths)}")
                         for i, f in enumerate(res.audio_paths, 1):
