@@ -46,8 +46,14 @@ class SapiBackend(Backend):
                 if "ru" in name.lower() or "ru" in langs.lower() or "рус" in name.lower():
                     out.append(VoiceDef(v.id, name, self.id))
             if not out:
-                out = [VoiceDef(v.id, name, self.id)
-                       for v in eng.getProperty("voices")][:6]
+                # русских голосов нет: даём любые, но честно помечаем —
+                # иначе английский голос прочтёт русский текст с акцентом
+                out = []
+                for v in eng.getProperty("voices")[:6]:
+                    name = getattr(v, "name", "") or v.id
+                    out.append(VoiceDef(
+                        v.id, f"{name} (не русский — читать будет плохо)",
+                        self.id))
             return out
         except Exception:
             return []

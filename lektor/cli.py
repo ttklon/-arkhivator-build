@@ -317,6 +317,13 @@ def batch(a, settings) -> int:
     if not files:
         print(f"В папке нет поддерживаемых файлов ({', '.join(SUPPORTED)}).")
         return 2
+    # -o папка работает и в пакетном режиме; -o файл.mp3 — нет
+    # (файлов много, один путь смысла не имеет)
+    out_dir = a.output
+    if out_dir and out_dir.lower().endswith((".mp3", ".wav")):
+        print("Внимание: в пакетном режиме -o задаёт папку, а не файл;")
+        print("           файл-результат игнорируется, пишу в стандартную папку.")
+        out_dir = None
     print(f"Пакетная озвучка: {len(files)} файл(ов) из {a.input}")
     ok = 0
     from .pipeline import Pipeline
@@ -330,7 +337,7 @@ def batch(a, settings) -> int:
             if not src.strip():
                 print("  пропущен: текста нет (пустой файл или PDF-скан)")
                 continue
-            res = pipe.run(src, os.path.splitext(name)[0])
+            res = pipe.run(src, os.path.splitext(name)[0], out_dir=out_dir)
             if res.audio_path:
                 ok += 1
                 if getattr(res, "audio_paths", None):
@@ -338,11 +345,13 @@ def batch(a, settings) -> int:
                 else:
                     print(f"  готово: {os.path.basename(res.audio_path)}")
             else:
-                print("  аудио не создано")
+                reason = getattr(res, "empty_reason", "") or "текст пуст"
+                print(f"  аудио не создано: {reason}")
         except Exception as e:
             print(f"  ошибка: {e}")
     print(f"\nГотово: {ok} из {len(files)} файлов.")
-    return 0 if ok == len(files) else (0 if ok else 3)
+    # 0 — все, 1 — частично, 3 — ни один
+    return 0 if ok == len(files) else (1 if ok else 3)
 
 
 def read_any(path: str) -> str:

@@ -43,3 +43,22 @@ def test_load_settings_type_validation(tmp_path, monkeypatch):
     open(p, "w", encoding="utf-8").write("{битый")
     s2 = config.load_settings()
     assert s2.speed == 1.0
+
+
+def test_batch_folder_output_and_rc(tmp_path, monkeypatch):
+    """Пакетный режим: -o задаёт папку вывода; rc=1 при частичном успехе."""
+    import os
+    from lektor import config
+    from lektor.cli import main
+    src = tmp_path / "тексты"
+    src.mkdir()
+    (src / "первый.txt").write_text(
+        "Первый файл пакетного теста. Два предложения.", encoding="utf-8")
+    (src / "пустой.txt").write_text("   \n\n", encoding="utf-8")
+    out = tmp_path / "выход"
+    # изолируем пользовательские папки программы
+    monkeypatch.setattr(config, "OUTPUT_DIR", str(out))
+    rc = main([str(src), "-o", str(out)])
+    assert rc == 1                      # один из двух — частичный успех
+    mps = [f for f in os.listdir(str(out)) if f.endswith(".mp3")]
+    assert len(mps) == 1                # -o реально использован как папка
