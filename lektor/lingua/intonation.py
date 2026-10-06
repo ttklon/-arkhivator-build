@@ -99,7 +99,9 @@ class IntonationPlanner:
         n = len(syntagms)
         for i, s in enumerate(syntagms):
             is_last = i == n - 1
-            if getattr(s, "contour", "") in ("enum_continue",):
+            if getattr(s, "contour", "") == "address" and not is_last:
+                contour = "address"            # обращение отдельной синтагмой
+            elif getattr(s, "contour", "") in ("enum_continue",):
                 contour = "enum_continue" if not is_last else "enum_final"
             elif is_last:
                 contour = sentence_type if sentence_type != "IK1_heading" else "IK1_heading"

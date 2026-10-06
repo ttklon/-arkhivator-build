@@ -112,6 +112,9 @@ class Segmenter:
         decisions = self._punct_decisions(words)
         syntagms = self._build(words, decisions, forced_breaks or {})
         syntagms = self._mark_enumerations(syntagms)
+        for syn in syntagms:
+            if syn.reason == "обращение":
+                syn.contour = "address"
 
         for i, s in enumerate(syntagms):
             if s.pause_override:
@@ -209,6 +212,9 @@ class Segmenter:
             return Boundary.MEDIUM, "после вводного оборота — нормативная пауза"
         if nxt.lemma in SUBORD_CONJS or self._is_intro(nxt):
             return Boundary.MEDIUM, "перед подчинительным союзом или вводным словом"
+        # обращение в начале предложения: «Иван Иванович, …»
+        if self._is_address(words, comma_id):
+            return Boundary.MEDIUM, "обращение"
         # наречные союзы и «но»: лёгкая пауза, как у чтеца
         # («…, поэтому суд…», «…, но попросил…»); «не только…, но и…»
         # не рвём
@@ -362,6 +368,35 @@ class Segmenter:
 
     def _closes_adp_intro(self, words: List[W], comma_id: int) -> bool:
         return self._adp_intro_flank(words, comma_id, forward=False)
+
+    _ADDRESS_HEADS = {"уважаемый", "уважаемая", "уважаемые", "дорогой",
+                      "дорогая", "дорогие", "господин", "госпожа",
+                      "господа", "товарищи", "уважаемое"}
+    _ADDRESS_ROLES = {"суд", "коллеги", "коллега", "участники", "участник",
+                      "стороны", "сторона", "присяжные", "присяжный",
+                      "председатель", "дамы", "дама", "господа"}
+
+    @staticmethod
+    def _is_address(words: List[W], comma_id: int) -> bool:
+        """«Иван Иванович, …», «Уважаемый суд, …» — обращение в начале."""
+        before = [w for w in words[:comma_id] if w.is_word]
+        after = words[comma_id + 1:]
+        nxt = next((w for w in after if w.is_word), None)
+        if nxt is None or not before or len(before) > 3:
+            return False
+        lemmas = [w.lemma.lower() for w in before]
+        texts = [w.text for w in before]
+        if lemmas[0] in Segmenter._ADDRESS_HEADS:
+            return True
+        if len(lemmas) >= 1 and lemmas[-1] in Segmenter._ADDRESS_ROLES:
+            return True
+        # Имя Отчество (два слова с заглавной) или одиночное Имя
+        if all(t[:1].isupper() for t in texts):
+            if len(texts) >= 2:
+                return True
+            # одиночное слово с заглавной — только известные имена/роли
+            return len(before) == 1 and lemmas[0] in Segmenter._ADDRESS_ROLES
+        return False
 
     @staticmethod
     def _only_correlation(words: List[W], comma_id: int) -> bool:

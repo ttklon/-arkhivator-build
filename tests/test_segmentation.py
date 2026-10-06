@@ -171,3 +171,25 @@ def test_conj_adverb_light_pause():
     assert n_syn("Ответчик признал иск, но попросил рассрочку.") == 2
     assert n_syn("Он не только явился, но и представил документы.") == 1
     assert n_syn("Это не столько иск, сколько жест отчаяния.") == 1
+
+
+def test_address_pauses():
+    """Обращения в начале предложения — отдельная синтагма с контуром."""
+    from lektor.lingua.syntax import SyntaxAnalyzer
+    from lektor.lingua.segmentation import Segmenter
+    from lektor.lingua.intonation import IntonationPlanner
+    from lektor.report import Report
+    sa = SyntaxAnalyzer()
+    seg = Segmenter(Report("т"), fix_commas=True)
+    ip = IntonationPlanner()
+
+    def contours(text):
+        syns = seg.segment(sa.analyze_sentence(text))
+        return [p.contour for p in ip.assign(syns, "IK1_statement")]
+
+    assert contours("Иван Иванович, ваши доводы убедительны.")[0] == "address"
+    assert contours("Уважаемый суд, прошу приобщить документ.")[0] == "address"
+    assert contours("Коллеги, рассмотрим второй вопрос.")[0] == "address"
+    assert contours("Господа, подведём итоги.")[0] == "address"
+    # «Москва, столица России» — не обращение
+    assert "address" not in contours("Москва, столица России.")
