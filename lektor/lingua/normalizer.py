@@ -141,7 +141,10 @@ class TextNormalizer:
 
     @classmethod
     def _expand_compound_shorts(cls, text: str) -> str:
-        if "." not in text or "<" in text:   # без точек/внутри SSML не трогаем
+        # SSML-теги уже извлечены выше по конвейеру; одинокие «<»/«>»
+        # сравнений не мешают шаблонам — раньше guard «<» в тексте
+        # отключал ВСЕ составные сокращения в таких предложениях
+        if "." not in text:
             return text
         parts = re.split(r"(<[^>]*>)", text)  # теги пропускаем
         for i, part in enumerate(parts):
@@ -151,6 +154,10 @@ class TextNormalizer:
                 part = rx.sub(repl, part)
             parts[i] = part
         text = "".join(parts)
+        # «рост 180 см.» — сантиметры, а не «смотри»: снимаем точку у
+        # «см.» после числа, чтобы словарное «см.» (смотри) не сработало
+        # (меру озвучит _measures: «ста восьмидесяти сантиметров»)
+        text = re.sub(r"(?<=\d)\s*см\.(?![а-яёА-ЯЁ])", " см", text)
         # «л.д.» (лист дела) — служебное обозначение в материалах суда:
         # без правила читалось «лист дэ» с паузами; падеж — от предлога
         def ld_repl(m):
@@ -223,6 +230,16 @@ class TextNormalizer:
         text = self._fractions(text)         # 1/2 -> «одна вторая»
         text = self._dot_dates(text)         # 12.03.2021 -> «двенадцатого марта …»
         text = self._dates(text)             # 27 июля 2006 года, в 2006 году
+        # знаки сравнения словами и ДО _numbers: «доход < 100» ->
+        # «доход меньше ста» (родительный после «меньше»); символы < и >
+        # ломали SSML — реплика теряла просодию через аварийный повтор
+        text = re.sub(r"(?<=[а-яёА-ЯЁ0-9])\s*<\s*(?=[0-9а-яёА-ЯЁ])",
+                      " меньше ", text)
+        text = re.sub(r"(?<=[а-яёА-ЯЁ0-9])\s*>\s*(?=[0-9а-яёА-ЯЁ])",
+                      " больше ", text)
+        # амперсанд: «R&D» -> «R и D» (символ & — сущность в SSML)
+        text = re.sub(r"(?<=[\wА-ЯЁа-яё])\s*&\s*(?=[\wА-ЯЁа-яё])",
+                      " и ", text)
         text = self._amounts(text)           # 5 млн, 2 тыс. (согласование)
         # «36 мес.» -> «тридцать шесть месяцев» (до _measures: его точка
         # сокращения иначе съедается как конец фразы)
@@ -911,6 +928,13 @@ class TextNormalizer:
             else:
                 n = int(raw)
                 words = numerals.cardinal_words(n, gender) + [self._plural_unit(n, forms)]
+                # «больше 180 см» -> «больше ста восьмидесяти
+                # сантиметров»: после сравнительного — родительный
+                before_w = text[:m.start()].rstrip().lower().split()
+                if before_w and before_w[-1] in ("более", "менее", "свыше",
+                                                 "меньше", "больше"):
+                    words = numerals.inflect_words(
+                        numerals.cardinal_words(n, gender), "gent") + [forms[2]]
             # «60 км/ч» -> «шестьдесят километров в час»; «9,8 м/с²» ->
             # «…метров в секунду в квадрате»; «км/с», «м/с» — тоже
             u = unit_raw.lower()
@@ -1537,7 +1561,7 @@ class TextNormalizer:
             before = text[:m.start()].rstrip()
             prev_word = before.split()[-1].lower() if before.split() else ""
             # «не более 3 лет» — родительный падеж после сравнительной
-            if prev_word in ("более", "менее", "свыше"):
+            if prev_word in ("более", "менее", "свыше", "меньше", "больше"):
                 case = "gent"
             # «в течение 10 дней», «по истечении 30 суток», «в рамках
             # 3 программ» — отглагольные предлоги требуют родительного

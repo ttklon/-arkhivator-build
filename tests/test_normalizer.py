@@ -937,3 +937,32 @@ def test_mes_and_rub_per_mes():
     assert "один месяц" in out and "два месяца" in out and "одиннадцать месяцев" in out
     out2 = n.normalize_sentence("Платёж 25 000 руб./мес.")
     assert "рублей в месяц" in out2 and "/" not in out2
+
+
+def test_comparison_signs_words():
+    """«<» и «>» — словами, числа в родительном: «меньше восемнадцати»."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    out = n.normalize_sentence("Возраст < 18 лет, рост > 180 см.")
+    assert "меньше восемнадцати" in out
+    assert "больше ста восьмидесяти сантиметров" in out
+    assert "<" not in out and ">" not in out
+
+
+def test_sm_after_number_is_centimeters():
+    """«180 см.» — сантиметры; «См. приложение» — по-прежнему «смотри»."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    assert "сантиметров" in n.normalize_sentence("Рост 180 см.")
+    assert "смотри" in n.normalize_sentence("См. приложение 5.")
+
+
+def test_ampersand_word():
+    """«R&D» -> «R и D»: амперсанд не ломает SSML."""
+    from lektor.lingua.normalizer import TextNormalizer
+    from lektor.report import Report
+    n = TextNormalizer(Report())
+    out = n.normalize_sentence("R&D отдел.")
+    assert "&" not in out and "R и D" in out
