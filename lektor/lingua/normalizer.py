@@ -798,6 +798,14 @@ class TextNormalizer:
             n = int(m.group(1))
             suf = m.group(2).lower()
             gender, case = self._ORD_SUFFIX.get(suf, ("m", "nomn"))
+            if suf == "е":
+                # «90-е годы» и одинокие «2000-е» — множественное,
+                # «2-е издание» — средний род единственного
+                tail = text[m.end():].lstrip()
+                nxt = re.match(r"[А-ЯЁа-яё-]+", tail)
+                p = analyze(nxt.group(0)) if nxt else None
+                if p is None or getattr(p.tag, "number", None) == "plur":
+                    gender, case = "pl", "nomn"
             if case is None:
                 before = text[:m.start()].rstrip().lower().split()
                 prep = before[-1] if before else ""

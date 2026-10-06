@@ -310,9 +310,9 @@ def test_ps_abbreviation():
     """«P.S.» читается по-русски, а не английскими буквами."""
     n = make()
     out = n.normalize_sentence("Итог подведён. P.S. Дополнение позже.")
-    assert "пэ-эс" in out
+    assert "постскриптум" in out
     out2 = n.normalize_sentence("Итог. PS Дополнение.")
-    assert "пэ-эс" in out2
+    assert "постскриптум" in out2
 
 
 def test_question_rise_segments():
@@ -966,3 +966,30 @@ def test_ampersand_word():
     n = TextNormalizer(Report())
     out = n.normalize_sentence("R&D отдел.")
     assert "&" not in out and "R и D" in out
+
+
+def test_ordinal_e_plural():
+    """«90-е годы» — мн.ч. по следующему слову; «2000-е» без слова — тоже."""
+    from lektor.config import load_settings
+    from lektor.textproc.cleaner import Cleaner
+    n = TextNormalizer(Report("т"), expand_abbrevs=True)
+    c = Cleaner(Report("т"), load_settings().footnotes)
+    out = n.normalize_sentence(c.clean("В 90-е годы практика изменилась."))
+    assert "девяностые" in out
+    out = n.normalize_sentence(c.clean("Экономика 2000-х и 2010-е отличается."))
+    assert "двухтысячных" in out and "десятые" in out
+    # но «2-е издание» — единственное среднее
+    out = n.normalize_sentence(c.clean("Это 2-е издание."))
+    assert "второе издание" in out
+
+
+def test_ps_and_common_eras():
+    """P.S. — постскриптум; «до н.э.» — нашей эры."""
+    from lektor.config import load_settings
+    from lektor.textproc.cleaner import Cleaner
+    n = TextNormalizer(Report("т"), expand_abbrevs=True)
+    c = Cleaner(Report("т"), load_settings().footnotes)
+    out = n.normalize_sentence(c.clean("P.S. Дополнение пришло позже."))
+    assert "постскриптум" in out
+    out = n.normalize_sentence(c.clean("События V века до н.э. описаны."))
+    assert "до нашей эры" in out
