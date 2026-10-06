@@ -28,6 +28,14 @@ SILERO_URLS = {
     "v4_ru": "https://models.silero.ai/models/tts/ru/v4_ru.pt",
 }
 
+# зеркала для кнопки «Скачать модель»: перебираем по очереди,
+# если основной сайт недоступен или медленный
+MODEL_MIRRORS = [
+    SILERO_URLS["v5_cis_base"],
+    "https://github.com/snakers4/silero-models/raw/master/"
+    "files/model_urls/ru_v5_cis_base.pt",
+]
+
 VOICES_RU = [
     ("xenia", "Ксения — женский"),
     ("baya", "Бая — женский"),
@@ -100,6 +108,47 @@ def translit(text: str) -> str:
     return re.sub(r"[A-Za-z]{2,}", repl, text)
 
 
+def download_model(progress=None, log=print) -> str:
+    """Скачивает модель голоса v5_cis_base.pt в папку «модели» (один раз).
+
+    progress(done, total) — колбэк для полосы загрузки GUI.
+    Файл сначала качается в *.part и проверяется загрузкой — битый
+    обрывок сети не останется под именем модели. Возвращает путь.
+    """
+    import io
+    import urllib.request
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    path = os.path.join(MODELS_DIR, "v5_cis_base.pt")
+    tmp = path + ".part"
+
+    def hook(blocks, bs, total):
+        if progress and total and total > 0:
+            progress(min(blocks * bs, total), total)
+
+    errors = []
+    for url in MODEL_MIRRORS:
+        try:
+            log(f"Скачиваю модель голоса (~60 МБ) с {url} …")
+            urllib.request.urlretrieve(url, tmp, reporthook=hook)
+            # проверка целостности: файл обязан открываться как torch.package
+            import torch
+            with open(tmp, "rb") as f:
+                torch.package.PackageImporter(io.BytesIO(f.read())).load_pickle(
+                    "tts_models", "model")
+            os.replace(tmp, path)
+            log("Модель скачана и проверена: " + path)
+            return path
+        except Exception as e:
+            errors.append(f"{url}: {e}")
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
+    raise RuntimeError(
+        "Не удалось скачать модель ни с одного зеркала:\n" +
+        "\n".join(errors))
+
+
 class SileroBackend(Backend):
     id = "silero"
     label = "Silero (быстрый и точный)"
@@ -110,6 +159,7 @@ class SileroBackend(Backend):
         self._log = log
         self._model = None
         self._model_id: Optional[str] = None
+        self._load_failed: str = ""      # ошибка загрузки: не ретраим каждую реплику
         self._lock = threading.Lock()
         # какая модель доступна локально
         self.available = self._detect_models()
@@ -139,20 +189,34 @@ class SileroBackend(Backend):
         with self._lock:
             if self._model is not None:
                 return
+            # загрузка уже падала — не повторяем её на КАЖДОЙ реплике
+            # (иначе озвучка без модели висела на сетевых таймаутах)
+            if self._load_failed:
+                raise RuntimeError(self._load_failed)
             import torch
             torch.set_grad_enabled(False)
             path = os.path.join(self.models_dir, (self.preferred or "v5_cis_base") + ".pt")
-            if os.path.exists(path):
-                with open(path, "rb") as f:
-                    import io
-                    buf = io.BytesIO(f.read())
-                model = torch.package.PackageImporter(buf).load_pickle("tts_models", "model")
-            else:
-                # скачивание через torch.hub (нужен интернет, только один раз)
-                mid = self.preferred or "v5_cis_base"
-                model, _ = torch.hub.load(
-                    repo_or_dir="snakers4/silero-models", model="silero_tts",
-                    language="ru", speaker=mid, trust_repo=True, verbose=False)
+            try:
+                if os.path.exists(path):
+                    with open(path, "rb") as f:
+                        import io
+                        buf = io.BytesIO(f.read())
+                    model = torch.package.PackageImporter(buf).load_pickle("tts_models", "model")
+                else:
+                    # скачивание через torch.hub (нужен интернет, только один раз)
+                    mid = self.preferred or "v5_cis_base"
+                    model, _ = torch.hub.load(
+                        repo_or_dir="snakers4/silero-models", model="silero_tts",
+                        language="ru", speaker=mid, trust_repo=True, verbose=False)
+            except Exception as e:
+                self._load_failed = (
+                    "Модель голоса не загрузилась. "
+                    "Файл модели не скачан, а скачать по сети не вышло:\n"
+                    f"{e}\n"
+                    "Нажмите «Скачать модель» в окне программы (нужен интернет "
+                    "один раз) или запустите install.bat.")
+                self._log("[ошибка] " + self._load_failed)
+                raise RuntimeError(self._load_failed)
             model.to(torch.device("cpu"))
             n = max(1, (os.cpu_count() or 2) // 2)
             try:

@@ -70,6 +70,7 @@ class App(ctk.CTk):
 
         self.after(100, self._poll_queue)
         self.after(200, self._load_engines)
+        self.after(300, self._update_engine_status)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _hotkey_synth(self):
@@ -90,13 +91,14 @@ class App(ctk.CTk):
     # Разметка окна
     # ==================================================================
     def _build_layout(self):
-        grid = self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)      # рабочая область
+        self.grid_rowconfigure(1, weight=0)      # лента статуса снизу
+        self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=0)
 
         # --- левая часть: текст -----------------------------------------
         left = ctk.CTkFrame(self)
-        left.grid(row=0, column=0, sticky="nsew", padx=(10, 6), pady=10)
+        left.grid(row=0, column=0, sticky="nsew", padx=(10, 6), pady=(10, 4))
         left.grid_rowconfigure(1, weight=1)
         left.grid_columnconfigure(0, weight=1)
 
@@ -131,68 +133,82 @@ class App(ctk.CTk):
 
         # --- правая панель: настройки ------------------------------------
         right = ctk.CTkScrollableFrame(self, width=360)
-        right.grid(row=0, column=1, sticky="nsew", padx=(6, 10), pady=10)
+        right.grid(row=0, column=1, sticky="nsew", padx=(6, 10), pady=(10, 4))
 
-        ctk.CTkLabel(right, text="Озвучка", font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w", pady=(4, 6))
+        def card(title):
+            """Карточка-секция настроек с заголовком."""
+            fr = ctk.CTkFrame(right, corner_radius=10)
+            fr.pack(fill="x", padx=4, pady=(4, 6))
+            ctk.CTkLabel(fr, text=title, font=ctk.CTkFont(size=13, weight="bold"),
+                         text_color="#9fb8d0").pack(anchor="w", padx=14, pady=(10, 2))
+            inner = ctk.CTkFrame(fr, fg_color="transparent")
+            inner.pack(fill="x", padx=14, pady=(0, 10))
+            return inner
 
-        self.om_engine = ctk.CTkOptionMenu(right, values=["Silero — быстрый и точный (рекомендую)"],
+        # --- карточка «Голос» -------------------------------------------
+        c_voice = card("ГОЛОС")
+        self.om_engine = ctk.CTkOptionMenu(c_voice, values=["Silero — быстрый и точный (рекомендую)"],
                                            command=self._on_engine_change)
         self.om_engine.pack(fill="x", pady=3)
         self.om_engine.set(ENGINE_LABELS.get(self.settings.engine, ENGINE_LABELS[ENGINE_SILERO]))
 
-        self.om_voice = ctk.CTkOptionMenu(right, values=["(голоса загружаются…)"])
+        self.om_voice = ctk.CTkOptionMenu(c_voice, values=["(голоса загружаются…)"])
         self.om_voice.pack(fill="x", pady=3)
-        ctk.CTkButton(right, text="▶  Прослушать голос", height=28,
-                      command=self.preview_voice).pack(fill="x", pady=(2, 8))
+        ctk.CTkButton(c_voice, text="▶  Прослушать голос", height=28,
+                      command=self.preview_voice).pack(fill="x", pady=(2, 0))
 
-        ctk.CTkLabel(right, text="Режим").pack(anchor="w")
-        self.om_mode = ctk.CTkOptionMenu(right, values=["Лекция", "Чтение документа"])
+        # --- карточка «Режим и темп» -------------------------------------
+        c_mode = card("РЕЖИМ И ТЕМП")
+        self.om_mode = ctk.CTkOptionMenu(c_mode, values=["Лекция", "Чтение документа"])
         self.om_mode.pack(fill="x", pady=3)
         self.om_mode.set("Лекция" if self.settings.mode == "lecture" else "Чтение документа")
 
-        seg_theme = ctk.CTkSegmentedButton(right, values=["Тёмная", "Светлая"],
+        seg_theme = ctk.CTkSegmentedButton(c_mode, values=["Тёмная", "Светлая"],
                                            command=self._on_theme)
         seg_theme.pack(fill="x", pady=(6, 0))
         seg_theme.set("Светлая" if self.settings.appearance == "light" else "Тёмная")
 
         # диапазон как в CLI (кламп 0.5–1.5); сохранённое значение тоже клампим
-        self.sl_speed = self._slider(right, "Скорость речи", 0.5, 1.5,
+        self.sl_speed = self._slider(c_mode, "Скорость речи", 0.5, 1.5,
                                      max(0.5, min(1.5, self.settings.speed)))
-        self.sl_intra = self._slider(right, "Паузы внутри предложения", 0.5, 2.0, self.settings.pause_scale)
-        self.sl_inter = self._slider(right, "Паузы между предложениями", 0.5, 2.0, self.settings.inter_pause_scale)
+        self.sl_intra = self._slider(c_mode, "Паузы внутри предложения", 0.5, 2.0, self.settings.pause_scale)
+        self.sl_inter = self._slider(c_mode, "Паузы между предложениями", 0.5, 2.0, self.settings.inter_pause_scale)
 
-        self.sw_fix = ctk.CTkSwitch(right, text="Исправлять запятые по смыслу")
+        # --- карточка «Логика текста» ------------------------------------
+        c_logic = card("ЛОГИКА ТЕКСТА")
+        self.sw_fix = ctk.CTkSwitch(c_logic, text="Исправлять запятые по смыслу")
         self.sw_fix.pack(anchor="w", pady=(6, 1))
         self.sw_fix.select() if self.settings.fix_commas else self.sw_fix.deselect()
-        self.sw_abbr = ctk.CTkSwitch(right, text="Расшифровывать аббревиатуры (первый раз)")
+        self.sw_abbr = ctk.CTkSwitch(c_logic, text="Расшифровывать аббревиатуры (первый раз)")
         self.sw_abbr.pack(anchor="w", pady=1)
         self.sw_abbr.select() if self.settings.expand_abbrevs else self.sw_abbr.deselect()
         self.sw_chapters = ctk.CTkSwitch(
-            right, text="Разбивать по главам (по заголовкам текста)")
+            c_logic, text="Разбивать по главам (по заголовкам текста)")
         self.sw_chapters.pack(anchor="w", pady=1)
         self.sw_chapters.select() if getattr(self.settings, "chapters", False) \
             else self.sw_chapters.deselect()
 
-        ctk.CTkLabel(right, text="Сноски").pack(anchor="w", pady=(8, 0))
-        self.om_foot = ctk.CTkOptionMenu(right, values=["пропускать", "читать в конце (тише)"], width=200)
-        self.om_foot.pack(anchor="w", pady=3)
+        self.om_foot = ctk.CTkOptionMenu(c_logic, values=["пропускать", "читать в конце (тише)"], width=200)
+        self.om_foot.pack(fill="x", pady=(6, 0))
         self.om_foot.set("пропускать" if self.settings.footnotes == "skip" else "читать в конце (тише)")
 
-        ctk.CTkLabel(right, text="Формат файла").pack(anchor="w", pady=(8, 0))
-        self.om_fmt = ctk.CTkSegmentedButton(right, values=["MP3", "WAV"])
+        # --- карточка «Файл» ----------------------------------------------
+        c_file = card("ФАЙЛ")
+        self.om_fmt = ctk.CTkSegmentedButton(c_file, values=["MP3", "WAV"])
         self.om_fmt.pack(anchor="w", pady=3)
         self.om_fmt.set("MP3" if self.settings.fmt == "mp3" else "WAV")
 
-        self.btn_go = ctk.CTkButton(right, text="▶  ОЗВУЧИТЬ", height=42,
-                                    font=ctk.CTkFont(size=15, weight="bold"),
+        self.btn_go = ctk.CTkButton(right, text="▶  ОЗВУЧИТЬ ТЕКСТ", height=46,
+                                    font=ctk.CTkFont(size=16, weight="bold"),
+                                    corner_radius=10,
                                     command=self.start_job)
-        self.btn_go.pack(fill="x", pady=(14, 4))
-        self.progress = ctk.CTkProgressBar(right)
-        self.progress.pack(fill="x", pady=2)
+        self.btn_go.pack(fill="x", padx=4, pady=(12, 4))
+        self.progress = ctk.CTkProgressBar(right, height=14)
+        self.progress.pack(fill="x", padx=4, pady=(4, 2))
         self.progress.set(0)
         self.lbl_status = ctk.CTkLabel(right, text="Готов к работе", text_color="#8fa3b8",
-                                       justify="left", anchor="w")
-        self.lbl_status.pack(fill="x", pady=2)
+                                       justify="left", anchor="w", wraplength=330)
+        self.lbl_status.pack(fill="x", padx=6, pady=2)
         # подсказка о горячих клавишах
         ctk.CTkLabel(right, text="Ctrl+O — открыть · Ctrl+Enter — озвучить\n"
                                  "Ctrl+M — разметка · Ctrl+B — папка · Esc — отмена",
@@ -201,10 +217,10 @@ class App(ctk.CTk):
         self.btn_cancel = ctk.CTkButton(right, text="Отменить", height=28,
                                         fg_color="#7a3b3b", hover_color="#933",
                                         command=self.cancel_job, state="disabled")
-        self.btn_cancel.pack(fill="x", pady=2)
+        self.btn_cancel.pack(fill="x", padx=4, pady=2)
 
         row_btns = ctk.CTkFrame(right, fg_color="transparent")
-        row_btns.pack(fill="x", pady=(8, 2))
+        row_btns.pack(fill="x", padx=4, pady=(8, 2))
         ctk.CTkButton(row_btns, text="Папка с аудио", height=28,
                       command=self.open_folder).pack(side="left", expand=True, fill="x", padx=2)
         ctk.CTkButton(row_btns, text="Отчёт", height=28,
@@ -212,8 +228,148 @@ class App(ctk.CTk):
         ctk.CTkButton(row_btns, text="Словари", height=28,
                       command=self.open_dicts).pack(side="left", expand=True, fill="x", padx=2)
 
+        ctk.CTkLabel(right, text="ЖУРНАЛ", font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color="#9fb8d0").pack(anchor="w", padx=6, pady=(10, 2))
         self.log = ctk.CTkTextbox(right, height=130, font=ctk.CTkFont(size=12))
-        self.log.pack(fill="x", pady=(10, 0))
+        self.log.pack(fill="x", padx=4, pady=(0, 0))
+
+        # --- лента статуса снизу: состояние движка + быстрые действия ----
+        bar = ctk.CTkFrame(self, corner_radius=8)
+        bar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=(4, 8))
+
+        self.lbl_engine_status = ctk.CTkLabel(
+            bar, text="… проверяю движок голоса", font=ctk.CTkFont(size=13),
+            anchor="w", justify="left")
+        self.lbl_engine_status.pack(side="left", padx=(10, 6), pady=6)
+
+        self.btn_dl_model = ctk.CTkButton(
+            bar, text="⬇  Скачать модель голоса (60 МБ, один раз)",
+            height=30, fg_color="#2e6e4e", hover_color="#3a8a61",
+            command=self.download_model_flow)
+        self.btn_dl_model.pack(side="right", padx=6)
+        ctk.CTkButton(bar, text="Диагностика", height=30, width=110,
+                      command=self.run_doctor).pack(side="right", padx=6)
+
+    # ------------------------------------------------------------------
+    # Лента статуса: обновление индикатора движка
+    # ------------------------------------------------------------------
+    def _update_engine_status(self):
+        """Текст ленты по фактическому состоянию Silero."""
+        try:
+            from ..synthesis.silero_backend import SileroBackend
+            from ..config import MODELS_DIR
+            import os
+            has_file = any(os.path.exists(os.path.join(MODELS_DIR, m))
+                           for m in ("v5_cis_base.pt", "v5_5_ru.pt", "v4_ru.pt"))
+            b = SileroBackend()
+            if b.model_ready():
+                n = len(b.voices())
+                self.lbl_engine_status.configure(
+                    text=f"●  Движок Silero готов — {n} голосов, всё работает офлайн",
+                    text_color="#5fd38a")
+                self.btn_dl_model.pack_forget()
+            elif has_file:
+                self.lbl_engine_status.configure(
+                    text="●  Файл модели есть, но не загружается — нажмите «Диагностика»",
+                    text_color="#e8c268")
+                self.btn_dl_model.pack_forget()
+            else:
+                self.lbl_engine_status.configure(
+                    text="⚠  Модель голоса ещё не скачана — без неё озвучка невозможна",
+                    text_color="#e88168")
+                self.btn_dl_model.pack(side="right", padx=6)
+        except Exception as e:
+            # customtkinter/torch недоступны — вероятно, не запускался install.bat
+            self.lbl_engine_status.configure(
+                text=f"⚠  Движок голоса недоступен ({e}) — запустите install.bat",
+                text_color="#e88168")
+
+    # ------------------------------------------------------------------
+    # Скачивание модели голоса (кнопка в ленте статуса)
+    # ------------------------------------------------------------------
+    def download_model_flow(self):
+        if self._worker and self._worker.is_alive():
+            messagebox.showinfo("Лектор", "Дождитесь окончания текущей операции.")
+            return
+        if not messagebox.askyesno(
+                "Лектор",
+                "Скачать модель голоса Silero (~60 МБ)?\n"
+                "Нужен интернет один раз — дальше программа работает офлайн."):
+            return
+        self.btn_go.configure(state="disabled")
+        self.btn_dl_model.configure(state="disabled")
+        self.progress.set(0)
+        self.lbl_status.configure(text="Скачиваю модель голоса…")
+
+        def ui(done, total):
+            self._queue.put(("dl_progress", done, total))
+
+        def work():
+            try:
+                from ..synthesis.silero_backend import download_model
+                download_model(progress=ui,
+                               log=lambda m: self._queue.put(("log", m)))
+                self._queue.put(("dl_done", None))
+            except Exception as e:
+                self._queue.put(("dl_done", str(e)))
+
+        self._worker = threading.Thread(target=work, daemon=True)
+        self._worker.start()
+
+    def _on_dl_progress(self, done, total):
+        if total:
+            self.progress.set(min(1.0, done / total))
+            self.lbl_status.configure(
+                text=f"Скачиваю модель… {done // 1024} из {total // 1024} КБ")
+
+    def _on_dl_done(self, error):
+        self.btn_go.configure(state="normal")
+        self.btn_dl_model.configure(state="normal")
+        if error:
+            self.progress.set(0)
+            self.lbl_status.configure(text="Модель не скачалась")
+            messagebox.showerror(
+                "Лектор",
+                "Не удалось скачать модель голоса:\n" + str(error) +
+                "\n\nПроверьте интернет или запустите install.bat.")
+            return
+        self.progress.set(1.0)
+        self.lbl_status.configure(text="Модель голоса скачана — можно озвучивать!")
+        self._load_engines()
+        self._update_engine_status()
+
+    # ------------------------------------------------------------------
+    # Диагностика (doctor) в окне программы
+    # ------------------------------------------------------------------
+    def run_doctor(self):
+        if self._worker and self._worker.is_alive():
+            messagebox.showinfo("Лектор", "Дождитесь окончания текущей операции.")
+            return
+        self.lbl_status.configure(text="Проверяю систему…")
+
+        def work():
+            import io
+            from contextlib import redirect_stdout
+            from ..cli import doctor
+            buf = io.StringIO()
+            try:
+                with redirect_stdout(buf):
+                    doctor()
+            except Exception as e:
+                buf.write(f"\n(диагностика упала: {e})")
+            self._queue.put(("doctor_done", buf.getvalue()))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_doctor_done(self, text):
+        self.lbl_status.configure(text="Диагностика завершена")
+        win = tk.Toplevel(self)
+        win.title("Диагностика")
+        win.geometry("680x520")
+        txt = ctk.CTkTextbox(win, font=ctk.CTkFont(size=12))
+        txt.pack(fill="both", expand=True, padx=8, pady=8)
+        txt.insert("1.0", text)
+        txt.configure(state="disabled")
 
     def _on_theme(self, label: str):
         mode = "light" if label == "Светлая" else "dark"
@@ -525,6 +681,22 @@ class App(ctk.CTk):
         if self._worker and self._worker.is_alive():
             return
         settings = self._collect_settings()
+        # предпроверка: без модели голоса Silero озвучка невозможна —
+        # сообщаем сразу, а не после минут сетевых таймаутов
+        if settings.engine == ENGINE_SILERO:
+            from ..synthesis.silero_backend import SileroBackend
+            b = SileroBackend()
+            if not b.model_ready():
+                if messagebox.askyesno(
+                        "Лектор",
+                        "Модель голоса Silero ещё не скачана — озвучить текст "
+                        "без неё невозможно.\n\nСкачать сейчас (~60 МБ, нужен "
+                        "интернет один раз)?"):
+                    self.download_model_flow()
+                else:
+                    self.lbl_status.configure(
+                        text="Остановлено: нет модели голоса. Нажмите «Скачать модель» ниже.")
+                return
         self._cancel.clear()
         self.btn_go.configure(state="disabled")
         self.btn_cancel.configure(state="normal")
@@ -648,8 +820,15 @@ class App(ctk.CTk):
                     self.lbl_status.configure(text=f"{stage}: {msg}"[:120])
                 elif kind == "log":
                     self._log(item[1])
+                elif kind == "dl_progress":
+                    self._on_dl_progress(item[1], item[2])
+                elif kind == "dl_done":
+                    self._on_dl_done(item[1])
+                elif kind == "doctor_done":
+                    self._on_doctor_done(item[1])
                 elif kind == "engines":
                     self._apply_engines(item[1], item[2])
+                    self._update_engine_status()
                 elif kind == "markup":
                     markup, report_text = item[1], item[2]
                     if markup is None:

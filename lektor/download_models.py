@@ -33,6 +33,15 @@ FULL_PROBE = ("Привет! Это проверка установки. Суд 
               "о хищении: осуждённый освобождён по амнистии.")
 
 
+def _mirrors(which: str):
+    """Основной сайт Silero + запасное зеркало на GitHub (LFS)."""
+    return [
+        SILERO_URLS[which],
+        f"https://github.com/snakers4/silero-models/raw/master/"
+        f"files/model_urls/{'ru_' if which != 'v4_ru' else ''}{which}.pt",
+    ]
+
+
 def _download(url: str, path: str) -> bool:
     if os.path.exists(path) and os.path.getsize(path) > 10_000_000:
         print(f"  уже скачано: {path}")
@@ -80,9 +89,12 @@ def check_silero_stress() -> bool:
 
 def download_silero(which: str = "v5_cis_base") -> bool:
     os.makedirs(MODELS_DIR, exist_ok=True)
-    url = SILERO_URLS[which]
     path = os.path.join(MODELS_DIR, which + ".pt")
-    if not _download(url, path):
+    ok = any(_download(url, path) for url in _mirrors(which))
+    if not ok:
+        # последнее зеркало уже печатало свою ошибку; подсказка
+        print("  Проверьте интернет и запустите установку ещё раз,")
+        print("  либо скачайте модель кнопкой в окне программы.")
         return False
     # самопроверка: синтез + сохранение пробного файла
     try:
