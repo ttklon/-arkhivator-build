@@ -207,7 +207,7 @@ def _read_docx(path: str) -> str:
 
 def _read_pdf(path: str) -> str:
     try:
-        import fitz  # PyMuPDF
+        import pymupdf as fitz  # PyMuPDF: import fitz удалён в новых версиях
         doc = fitz.open(path)
     except ImportError:
         raise RuntimeError("не установлен PyMuPDF: запустите install.bat "
@@ -225,9 +225,28 @@ def _read_pdf(path: str) -> str:
 
 
 def _read_book(path: str) -> str:
-    """fb2 и epub — это zip/xml, достаём текст."""
+    """fb2 и epub — это zip/xml, достаём текст.
+
+    fb2 часто лежит незазипованным (просто XML) — читаем и так, и так.
+    """
     texts = []
-    with zipfile.ZipFile(path) as z:
+    try:
+        z = zipfile.ZipFile(path)
+    except zipfile.BadZipFile:
+        if path.lower().endswith(".fb2"):
+            # незазипованный fb2 — обычный XML-файл
+            try:
+                html = open(path, "rb").read().decode("utf-8", errors="replace")
+            except Exception as e:
+                raise RuntimeError(f"fb2 не читается: {e}")
+            txt = _soup_text(html)
+            if txt:
+                return txt
+            raise RuntimeError("В fb2 не нашлось текста — файл пуст или повреждён.")
+        raise RuntimeError(
+            "Файл повреждён или не является действительным epub "
+            "(внутри нет zip-контейнера).")
+    with z:
         names = z.namelist()
         if path.lower().endswith(".fb2"):
             targets = [n for n in names if n.endswith(".fb2") or n.endswith(".xml")]
@@ -241,18 +260,30 @@ def _read_book(path: str) -> str:
                 html = data.decode("utf-8", errors="replace")
             except Exception:
                 continue
-            try:
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(html, "html.parser")
-                for bad in soup(["script", "style", "head"]):
-                    bad.decompose()
-                txt = soup.get_text("\n")
-            except Exception:
-                txt = re.sub(r"<[^>]+>", " ", html)
-            txt = re.sub(r"\n{3,}", "\n\n", txt).strip()
+            txt = _soup_text(html)
             if txt:
                 texts.append(txt)
     return "\n\n".join(texts)
+
+
+def _soup_text(html: str) -> str:
+    """Текст из html/xml: убрать скрипты/стили, вытащить содержимое."""
+    try:
+        from bs4 import BeautifulSoup
+        try:
+            # fb2 — это XML: bs4 печатает предупреждение, гасим его
+            from bs4 import XMLParsedAsHTMLWarning
+            import warnings
+            warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+        except Exception:
+            pass
+        soup = BeautifulSoup(html, "html.parser")
+        for bad in soup(["script", "style", "head"]):
+            bad.decompose()
+        txt = soup.get_text("\n")
+    except Exception:
+        txt = re.sub(r"<[^>]+>", " ", html)
+    return re.sub(r"\n{3,}", "\n\n", txt).strip()
 
 
 def detect_title(path: str, text: str) -> str:

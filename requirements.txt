@@ -17,4 +17,5 @@ beautifulsoup4     # чтение .epub/.fb2
 charset-normalizer # определение кодировки текстовых файлов
 lameenc            # экспорт MP3
 customtkinter      # интерфейс
+pyttsx3            # запасной движок: встроенные голоса Windows (SAPI, без загрузок)
 chatterbox-tts     # HD-движок (естественный голос, нужен NVIDIA + torchaudio)

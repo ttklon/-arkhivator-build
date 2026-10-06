@@ -113,3 +113,38 @@ def test_docx_table_order():
         assert 0 <= out.find("Первый") < first < out.find("Последний")
     finally:
         os.unlink(tmp)
+
+
+FB2_XML = ('<?xml version="1.0"?>\n'
+           '<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">'
+           '<body><section><p>Незазипованный fb2.</p>'
+           '<p>Вторая строка книги.</p></section></body></FictionBook>')
+
+
+def test_fb2_plain_xml(tmp_path):
+    """fb2 без zip-обёртки (обычный XML) читается как книга."""
+    p = tmp_path / "книга.fb2"
+    p.write_text(FB2_XML, encoding="utf-8")
+    out = read_file(str(p))
+    assert "Незазипованный fb2." in out
+    assert "Вторая строка книги." in out
+
+
+def test_fb2_zipped(tmp_path):
+    """Зазипованный fb2 по-прежнему читается из zip-контейнера."""
+    import zipfile
+    p = tmp_path / "книга_z.fb2"
+    with zipfile.ZipFile(str(p), "w") as z:
+        z.writestr("book.fb2", FB2_XML)
+    out = read_file(str(p))
+    assert "Незазипованный fb2." in out
+
+
+def test_epub_garbage_clear_error(tmp_path):
+    """Мусор с расширением .epub — внятная ошибка, не сырой BadZipFile."""
+    import pytest
+    p = tmp_path / "битый.epub"
+    p.write_bytes(b"not a zip at all")
+    with pytest.raises(RuntimeError) as e:
+        read_file(str(p))
+    assert "epub" in str(e.value)
